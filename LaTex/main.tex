@@ -1,0 +1,1369 @@
+\documentclass[12pt,a4paper]{article}
+\usepackage[utf8]{vietnam}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+\usepackage{geometry}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{booktabs}
+\geometry{margin=2.5cm}
+\usepackage[hidelinks]{hyperref}
+
+\title{\textbf{Tìm hiểu mô hình K-Nearest Neighbors (KNN)}}
+\author{Nguyễn Lê Anh Tuấn - Nguyễn Đức Huy}
+\date{}
+
+\begin{document}
+
+\maketitle
+\tableofcontents
+\newpage
+
+\section{Thuật toán KNN là gì?}
+
+K-Nearest Neighbors (KNN) là một thuật toán học có giám sát (supervised learning) và phi tham số (non-parametric). Thuật toán hoạt động dựa trên nguyên lý: các điểm dữ liệu tương tự nhau thường nằm gần nhau trong không gian đặc trưng. Từ đó, KNN sử dụng độ gần (proximity) giữa các điểm để thực hiện phân loại hoặc dự đoán giá trị.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\linewidth]{b4c215ea-de4d-4f7b-946c-eae33dd73f39.jpeg}
+    \caption{Minh họa thuật toán KNN (Nguồn: VinBigData)}
+\end{figure}
+
+\section{Chuẩn hóa dữ liệu (Feature Scaling)}
+
+Vì KNN tính toán dựa hoàn toàn vào khoảng cách, bất kỳ đặc trưng nào có phạm vi giá trị lớn hơn đều sẽ áp đảo các đặc trưng còn lại. Vì vậy, chuẩn hóa dữ liệu trước khi chạy KNN là bước bắt buộc.
+\subsection{Chuẩn hóa dữ liệu bằng Robust Scaling}
+
+Trong không gian đặc trưng của thuật toán KNN, đặc biệt khi sử dụng
+độ đo khoảng cách Euclidean, các giá trị ngoại lai có thể làm thổi
+phồng khoảng cách giữa các điểm dữ liệu, từ đó gây sai lệch nghiêm
+trọng trong kết quả phân loại. Phương pháp chuẩn hóa Z-Score truyền
+thống dựa trên giá trị trung bình và độ lệch chuẩn — hai đại lượng
+vốn rất nhạy cảm với nhiễu — do đó không đảm bảo tính ổn định khi
+dữ liệu chứa ngoại lai.
+
+Để khắc phục hạn chế trên, nghiên cứu này áp dụng phương pháp
+\textit{Robust Scaling}, trong đó hai đại lượng thống kê bền vững là
+Trung vị (Median) và Khoảng tứ phân vị (Interquartile Range --- IQR)
+được sử dụng thay thế. Nhờ bản chất kháng nhiễu của các đại lượng
+này, phần lõi của phân phối dữ liệu được thu gọn về cùng thang đo mà
+không bị bóp méo bởi các quan sát bất thường ở hai đầu mút.
+
+\subsubsection*{Trung vị}
+
+Cho một đặc trưng gồm $n$ dữ liệu. Sau khi sắp xếp theo thứ tự tăng
+dần, ký hiệu tập đã sắp xếp là $X = \{x_1, x_2, \dots, x_n\}$,
+Trung vị được xác định theo tính chẵn lẻ của $n$:
+
+\begin{equation}
+    \operatorname{Median}(X) =
+    \begin{cases}
+        x_{\frac{n+1}{2}} & \text{nếu } n \text{ lẻ,} \\[6pt]
+        \dfrac{1}{2}\!\left(x_{\frac{n}{2}} + x_{\frac{n}{2}+1}\right)
+        & \text{nếu } n \text{ chẵn.}
+    \end{cases}
+\end{equation}
+
+\subsubsection*{Khoảng tứ phân vị}
+
+Tứ phân vị là các mốc chia tập dữ liệu đã sắp xếp thành bốn phần
+có số lượng dữ liệu bằng nhau. Cụ thể, $Q_1$ và $Q_3$ lần lượt là
+Trung vị của nửa dưới và nửa trên so với $Q_2 = \operatorname{Median}(X)$,
+tương ứng với bách phân vị thứ 25 và thứ 75 của tập dữ liệu.
+Khoảng tứ phân vị đo lường độ phân tán của 50\% quan sát trung tâm
+và được định nghĩa là:
+
+\begin{equation}
+    \text{IQR} = Q_3 - Q_1.
+\end{equation}
+Trong các thư viện như Pandas và NumPy, người ta thường tính $Q_3$ và $Q_1$ bằng cách là chia (n-1) khoảng , điều này đảm bảo rằng kể cả khi dữ liệu bị rời rạc ta vẫn có thể đảm bảo được tính liên tục   
+\begin{equation}
+    pos=(n-1)*q
+\end{equation} 
+Với q là bách phân vị thứ 25 hoặc 75, giả sử ta tính được Q1 có pos=1.25 tức là giá trị Q1 đã đi từ $x_1$ đến $x_2$ và Q1 sẽ ở vị trí 0.25 giữa $x_2$ và $x_3$ nên ta nói pos là vị trí thực tế của $Q_i$
+\newline
+Từ đó , ta rút ra được công thức tính Q1 và Q3 như sau:
+\[
+Q_i=x_i+(pos-i)(x_{i+1}-x_i)
+\] 
+Trong đó:
+
+i là phần nguyên của pos, việc lấy (pos-i) cho ta biết tỉ lệ nội suy , i sẽ cho ta biết chính xác là ta đang ở đoạn nào .  
+\newline
+Do IQR chỉ phản ánh phần lõi của phân phối, đại lượng này không bị
+ảnh hưởng bởi các giá trị ngoại lai ở hai cực.
+
+\subsubsection*{Công thức chuẩn hóa}
+
+Với một đặc trưng $x$, giá trị sau chuẩn hóa Robust Scaling được tính
+theo công thức:
+
+\begin{equation}
+    x_{\mathrm{scaled}} = \frac{x - \operatorname{Median}(x)}{\operatorname{IQR}(x)},
+    \qquad \operatorname{IQR}(x) = Q_3(x) - Q_1(x).
+\end{equation}
+
+Phép biến đổi này đưa tâm phân phối về gốc tọa độ và co thang đo
+theo độ rộng của khoảng trung tâm, đảm bảo rằng các giá trị ngoại
+lai không chi phối quá trình tính khoảng cách trong không gian đặc
+trưng của KNN.
+\subsection{Kiểm soát giá trị ngoại lai với 2 lớp Clipping}
+Mặc dù Robust Scaling giúp khối dữ liệu chính không bị ảnh hưởng, bản thân các điểm ngoại lai vẫn tồn tại với khoảng cách rất xa. Để triệt tiêu hoàn toàn tác động tiêu cực của chúng mà không làm mất mát số lượng mẫu dữ liệu (như khi xóa bỏ hoàn toàn), ta áp dụng kỹ thuật \textit{Clipping} (hay Winsorization) với 2 lớp lọc: chặn trần và chặn đáy.
+
+Cụ thể, Clipping sẽ "ép" các giá trị vượt ngưỡng về một mức biên giới hạn an toàn. Các mức biên này được xác định dựa trên nền tảng của IQR:
+\begin{itemize}
+    \item \textbf{Lớp lọc chặn đáy (Lower Bound):} $x_{min} = Q_1 - 1.5 \times \text{IQR}$
+    \item \textbf{Lớp lọc chặn trần (Upper Bound):} $x_{max} = Q_3 + 1.5 \times \text{IQR}$
+\end{itemize}
+
+Hàm xử lý Clipping qua 2 lớp lọc được biểu diễn dưới dạng toán học như sau:
+$$
+x_{clipped} = 
+\begin{cases} 
+x_{max} & \text{khi } x > x_{max} \\
+x_{min} & \text{khi } x < x_{min} \\
+x & \text{khi } x_{min} \le x \le x_{max}
+\end{cases}
+$$
+
+Sự kết hợp đồng thời giữa Robust Scaling và 2 lớp Clipping tạo ra một quy trình tiền xử lý mạnh mẽ, đảm bảo tính công bằng cho các đặc trưng khi đưa vào tính toán khoảng cách Euclidean trong thuật toán KNN.
+\subsection{Chuẩn hóa độ dài đơn vị (Unit Length Scaling) hay còn gọi là chuẩn hóa L2}
+
+Còn gọi là Scaling to Unit Norm, phương pháp này biến đổi mỗi mẫu dữ liệu sao cho vector kết quả có độ dài (norm) bằng 1, giúp loại bỏ ảnh hưởng về độ lớn và chỉ giữ lại thông tin về hướng.
+
+\begin{equation}
+    x_{\text{unit}} = \frac{x}{\sqrt{\sum_{i=1}^{n} x_i^2}}
+\end{equation}
+
+Phương pháp này thường được dùng trong các bài toán so sánh độ tương đồng góc (Cosine Similarity).
+
+\section{Các hàm đo khoảng cách trong KNN}
+
+Để xác định "độ gần", thuật toán sử dụng các hàm đo khoảng cách toán học giữa điểm cần dự đoán $x$ và các điểm trong tập huấn luyện $y$.
+
+\subsection{Khoảng cách Euclid (Euclidean Distance)}
+
+Đây là khoảng cách phổ biến nhất — đo đường thẳng nối giữa hai điểm trong không gian $n$ chiều.
+
+\begin{equation}
+    d(x, y) = \sqrt{\sum_{i=1}^{n} (x_i - y_i)^2}
+\end{equation}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.45\linewidth]{Euclidean_distance_2d.png}
+    \caption{Khoảng cách Euclid (Nguồn: Wikipedia)}
+\end{figure}
+
+\subsection{Khoảng cách Manhattan}
+
+Khoảng cách được tính bằng tổng trị tuyệt đối hiệu tọa độ giữa các điểm — phù hợp với không gian lưới.
+
+\begin{equation}
+    d(x, y) = \sum_{i=1}^{n} |x_i - y_i|
+\end{equation}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.45\linewidth]{64f82926-3a2a-4dbc-9bb8-05582c4c0d10.png}
+    \caption{Khoảng cách Manhattan (Nguồn: Viblo)}
+\end{figure}
+
+\subsection{Khoảng cách Chebyshev}
+
+Khoảng cách Chebyshev chỉ dựa vào chiều có sự chênh lệch lớn nhất giữa hai điểm.
+
+\begin{equation}
+    d(x, y) = \max_{i=1}^{n} \left(|x_i - y_i|\right)
+\end{equation}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.45\linewidth]{88defc46-4263-409a-bbcf-54810a1f390a.png}
+    \caption{Khoảng cách Chebyshev (Nguồn: Viblo)}
+\end{figure}
+
+
+\section{Tham số $p$ trong khoảng cách Minkowski}
+
+Khoảng cách Minkowski là dạng tổng quát hóa của cả ba khoảng cách trên:
+
+\begin{equation}
+    d(x, y) = \left( \sum_{i=1}^{n} |x_i - y_i|^p \right)^{1/p}
+\end{equation}
+
+Tham số $p$ quyết định hình dạng vùng lân cận và cách thuật toán "cảm nhận" không gian:
+\begin{itemize}
+    \item $p = 1$: khoảng cách Manhattan.
+    \item $p = 2$: khoảng cách Euclid.
+    \item $p \to \infty$: khoảng cách Chebyshev.
+\end{itemize}
+
+\subsection{$p = 1$ — Manhattan}
+
+Phù hợp khi các đặc trưng có ý nghĩa độc lập, không thể kết hợp trực tiếp (ví dụ: một trục là Tuổi, một trục là Thu nhập). Ít bị ảnh hưởng bởi ngoại lai hơn so với Euclid.
+
+\subsection{$p = 2$ — Euclid}
+
+Giá trị mặc định trong hầu hết các thư viện Machine Learning. Phản ánh khoảng cách vật lý thực tế trong không gian đa chiều và hoạt động tốt nhất khi dữ liệu đã được chuẩn hóa.
+
+\subsection{$p \to \infty$ — Chebyshev}
+
+Hay còn gọi là khoảng cách bàn cờ (Chessboard distance). Khoảng cách hoàn toàn do chiều có sự chênh lệch lớn nhất quyết định. Thường dùng trong bài toán lập trình quỹ đạo robot hoặc phát hiện bất thường cực đoan trong lưu lượng mạng.
+
+\section{Lựa chọn tham số $K$}
+\subsection{Cơ chế hoạt động của k-Fold Cross-Validation trong KNN}
+
+Kỹ thuật kiểm chứng chéo $k$-Fold được áp dụng nhằm giải quyết nhiệm vụ
+cốt lõi: tìm ra siêu tham số $K$ (số láng giềng) tối ưu một cách khách
+quan, giảm thiểu sự phụ thuộc vào cách phân chia dữ liệu ngẫu nhiên
+ban đầu.
+
+\textbf{Quy ước thuật ngữ.} Để tránh nhầm lẫn trong ngữ cảnh KNN, bài
+viết thống nhất hai ký hiệu: $K$ (viết hoa) chỉ số láng giềng gần nhất
+mà thuật toán sử dụng, còn $k$ (viết thường) chỉ số nếp gấp mà tập dữ
+liệu được chia ra, thông thường lấy $k = 5$ hoặc $k = 10$.
+
+Quy trình $k$-Fold trong mô hình KNN triển khai qua năm bước liên tiếp.
+
+\textbf{Bước 1 — Khởi tạo danh sách ứng viên $K$.} Trước tiên, ta xác
+định tập hợp các giá trị $K$ cần khảo sát. Nên ưu tiên các số lẻ để
+tránh tình huống hòa phiếu khi bầu chọn nhãn, chẳng hạn
+$K \in \{1, 3, 5, 7, 9, 11\}$.
+
+\textbf{Bước 2 — Phân chia tập dữ liệu.} Tập huấn luyện ban đầu được
+chia ngẫu nhiên thành $k$ phần rời rạc (folds) có kích thước xấp xỉ
+bằng nhau.
+
+\textbf{Bước 3 — Đánh giá chéo cho từng ứng viên $K$.} Với mỗi giá trị
+$K$, mô hình thực hiện $k$ lần đánh giá luân phiên. Ở lần lặp thứ $i$
+($1 \le i \le k$), fold thứ $i$ đóng vai trò tập kiểm định (Validation
+set), trong khi $k - 1$ fold còn lại được gộp thành tập huấn luyện tạm
+thời. Thuật toán KNN với $K$ láng giềng đang xét sẽ dự đoán nhãn cho
+tập kiểm định và ghi lại độ chính xác $\mathrm{Accuracy}_i$. Sau $k$
+lần lặp, độ chính xác kiểm chứng chéo của giá trị $K$ đó được tính theo
+công thức:
+\begin{equation}
+    Accuracy_i=\frac{\text{Tổng số dự đoán đúng}}{\text{Tổng Validation Set}}
+\end{equation}
+\begin{equation}
+    \mathrm{CV\_Accuracy} = \frac{1}{k} \sum_{i=1}^{k} \mathrm{Accuracy}_i.
+\end{equation}
+
+\textbf{Bước 4 — Lựa chọn $K$ tối ưu.} So sánh $\mathrm{CV\_Accuracy}$
+của toàn bộ ứng viên; giá trị $K$ cho độ chính xác trung bình cao nhất
+(tương đương sai số nhỏ nhất) được chọn làm siêu tham số chính thức của
+mô hình.
+
+\textbf{Bước 5 — Huấn luyện mô hình chung cuộc.} Sau khi đã xác định
+được $K$ tối ưu, mô hình KNN cuối cùng được huấn luyện lại trên toàn bộ
+dữ liệu gốc — tức là gộp cả $k$ folds — nhằm tận dụng tối đa lượng
+thông tin sẵn có trước khi đưa vào triển khai thực tế.
+
+Điểm ưu việt của phương pháp nằm ở tính công bằng trong đánh giá: mỗi
+điểm dữ liệu được luân phiên làm tập kiểm định đúng một lần và tham gia
+huấn luyện $k - 1$ lần, nhờ đó kết quả phản ánh sát nhất năng lực tổng
+quát hóa thực sự của mô hình.
+\subsection{Chọn theo trọng số khoảng cách }
+\subsubsection{Trọng số khoảng cách (Distance Weighting)}
+\begin{equation}
+    w_i = \frac{1}{d(x,\, x_i) + \varepsilon}
+\end{equation} 
+Trọng số này cho ta biết rằng các điểm gần K có độ quan trọng như thế nào , điểm nào càng gần thì sẽ có độ quan trọng hơn so với điểm ở xa . Ở đây $\varepsilon$ là một hằng số rất nhỏ để giúp tránh việc mẫu số bằng 0 
+\subsubsection{Dự đoán phân loại — bỏ phiếu có trọng số (Weighted Majority Vote)}
+Ở đây ta sẽ cho từng mẫu để thử nghiệm ,ý nghĩa của công thức này là với từng K ta sẽ tính trọng số của từng điểm của một nhãn rồi cộng tổng chúng lại chia cho tổng trọng số để ra được \% của một nhãn và đưa ra kết luận xem điểm đó với K đang xét hiện tại sẽ thuộc vào nhãn nào (nhãn có \% lớn hơn). Từ đó ta có thể tìm ra được Accuracy của K đang xét đó .
+\subsection{Không có Validation}
+
+Nếu bỏ qua bước Validation, $K$ phải được chọn thủ công vì bản thân KNN không thể tự xác định giá trị này. Trong học máy, $K$ được gọi là siêu tham số (Hyperparameter) — con số do người dùng áp đặt từ bên ngoài trước khi thuật toán chạy.
+
+Các cách chọn $K$ phổ biến khi không có Validation:
+\begin{itemize}
+    \item Chọn $K = \sqrt{N}$; nếu kết quả là số chẵn thì cộng hoặc trừ 1 để được số lẻ (tránh tình huống hòa phiếu).
+    \item Dùng giá trị mặc định $K = 5$ mà nhiều thư viện áp dụng sẵn.
+    \item Nếu dữ liệu sạch và phân tách rõ, có thể thử $K = 1$ hoặc $K = 3$.
+\end{itemize}
+
+Cách tiếp cận này mang tính kinh nghiệm và không đảm bảo tìm được $K$ tối ưu
+
+\section{Mô hình Toán học: K-Nearest Neighbors kết hợp Cosine Similarity}
+\subsection{Độ tương đồng và Khoảng cách Cosine}
+
+Cho $\mathbf{z}_q \in \mathbb{R}^d$ là vector của mẫu truy vấn và
+$\mathbf{z}_i \in \mathbb{R}^d$ là vector của mẫu huấn luyện thứ $i$.
+Độ tương đồng Cosine đo lường mức độ cùng hướng giữa hai vector thông
+qua góc $\theta$ tạo bởi chúng:
+
+\begin{equation}
+    S_C(\mathbf{z}_q, \mathbf{z}_i)
+    = \cos\theta
+    = \frac{\mathbf{z}_q \cdot \mathbf{z}_i}
+           {\|\mathbf{z}_q\|\,\|\mathbf{z}_i\|}
+    = \frac{\displaystyle\sum_{j=1}^{d} z_{qj}\,z_{ij}}
+           {\displaystyle\sqrt{\sum_{j=1}^{d} z_{qj}^2}
+            \sqrt{\sum_{j=1}^{d} z_{ij}^2}}
+\end{equation}
+
+Giá trị $S_C \in [-1, 1]$: bằng $1$ khi hai vector hoàn toàn cùng hướng,
+bằng $0$ khi vuông góc, và bằng $-1$ khi ngược chiều nhau. Để sử dụng
+như một metric khoảng cách (giá trị nhỏ hơn tương ứng với mức độ tương
+đồng cao hơn), khoảng cách Cosine được định nghĩa là:
+
+\begin{equation}
+    D_C(\mathbf{z}_q, \mathbf{z}_i) = 1 - S_C(\mathbf{z}_q, \mathbf{z}_i)
+\end{equation}
+
+Lưu ý rằng $D_C \in [0, 2]$ và bằng $0$ khi và chỉ khi hai vector hoàn
+toàn cùng hướng.
+\textbf{Công thức độ tương đồng Cosine khi dùng trọng số}
+
+\begin{equation}
+    w_i=\frac{1}{D_C(z_q,z_i)}
+\end{equation} 
+Với nhãn có tổng trọng số lớn nhất thì ta cho nhãn đó chính là nhãn mà mô hình dự đoán 
+\subsection{Xác định láng giềng và Phân loại}
+
+Tập $K$ láng giềng gần nhất của mẫu truy vấn, ký hiệu
+$\mathcal{N}_K(\mathbf{z}_q)$, được xác định bằng cách chọn $K$ mẫu
+huấn luyện có khoảng cách $D_C$ nhỏ nhất so với $\mathbf{z}_q$.
+Nhãn dự đoán $\hat{y}_q$ được quyết định theo nguyên tắc bầu chọn đa số
+(majority voting):
+
+\begin{equation}
+    \hat{y}_q
+    = \underset{c \,\in\, \mathcal{C}}{\mathrm{argmax}}
+      \sum_{\mathbf{z}_j \,\in\, \mathcal{N}_K(\mathbf{z}_q)}
+      \mathbf{1}\bigl[y_j = c\bigr]
+\end{equation}
+
+trong đó $\mathcal{C}$ là tập hợp tất cả các nhãn lớp, và
+$\mathbf{1}[\cdot]$ là hàm chỉ thị, nhận giá trị $1$ nếu điều kiện trong
+ngoặc được thỏa mãn và $0$ trong trường hợp còn lại. Nói cách khác, mẫu
+truy vấn được gán vào lớp xuất hiện nhiều nhất trong $K$ láng giềng của nó.
+\section{Hồi quy KNN}
+
+Bên cạnh bài toán phân loại (Classification), KNN còn được dùng cho bài toán hồi quy (Regression) — tức là dự đoán các giá trị liên tục. Thay vì bỏ phiếu, KNN Hồi quy lấy trung bình giá trị của $K$ điểm lân cận:
+
+\begin{equation}
+    \hat{y} = \frac{1}{K} \sum_{i}^{K} y_i
+\end{equation}
+
+
+
+\subsection{So sánh với Linear Regression}
+
+\subsubsection{Khả năng học và tốc độ}
+
+Linear Regression tốn thời gian ở giai đoạn huấn luyện để tối ưu hóa phương trình, nhưng một khi đã có phương trình, việc dự đoán chỉ là một phép tính đơn giản — gần như tức thì.
+
+KNN thì ngược lại: thời gian huấn luyện bằng 0 vì thuật toán chỉ lưu dữ liệu vào bộ nhớ. Tuy nhiên, mỗi lần dự đoán phải tính khoảng cách đến toàn bộ tập huấn luyện. Khi dữ liệu lên đến hàng triệu mẫu, chi phí này trở nên rất đắt đỏ.
+
+\subsubsection{Tuyến tính và phi tuyến}
+
+Linear Regression bị ràng buộc bởi giả định tuyến tính — mô hình luôn khớp một đường thẳng với dữ liệu. Nếu quan hệ thực tế là phi tuyến, độ chính xác sẽ kém.
+
+KNN không bị ràng buộc vào bất kỳ dạng hàm nào, nên đường dự đoán có thể uốn theo mọi cấu trúc của dữ liệu.
+
+\subsubsection{Ngoại suy}
+
+Linear Regression có thể ngoại suy (Extrapolation): kéo dài phương trình ra ngoài miền dữ liệu huấn luyện và vẫn cho ra kết quả có tính nhất quán.
+
+KNN hoàn toàn bất lực trong ngoại suy: nó chỉ có thể nội suy (Interpolation) trong phạm vi dữ liệu đã thấy. Mọi dự đoán đều bị giới hạn bởi giá trị lớn nhất và nhỏ nhất trong tập huấn luyện.
+
+\medskip
+\noindent\textbf{Tóm lại:} dữ liệu đơn giản, tuyến tính, cần tốc độ cao $\to$ dùng Linear Regression. Dữ liệu phức tạp, phi tuyến, quy mô nhỏ $\to$ dùng KNN Regression.
+\subsubsection{Công thức tính $\hat{y}$ thep trọng số}
+\begin{equation}
+    \hat{y} = \frac{\displaystyle\sum_{i=1}^{K} w_i\, y_i}
+                   {\displaystyle\sum_{i=1}^{K} w_i}
+\end{equation}
+\section{Quy trình hoạt động của KNN}
+
+\begin{enumerate}
+    \item \textbf{Chọn $K$.} Xác định số lượng láng giềng cần xét. $K$ quá nhỏ dễ gây overfitting; $K$ quá lớn dễ gây underfitting.
+    \item \textbf{Tính khoảng cách.} Tính khoảng cách từ điểm cần dự đoán đến tất cả các điểm trong tập huấn luyện (thường dùng Euclid).
+    \item \textbf{Tìm $K$ điểm gần nhất.} Sắp xếp khoảng cách tăng dần và chọn $K$ điểm nhỏ nhất.
+    \item \textbf{Đưa ra dự đoán.}
+    \begin{itemize}
+        \item Phân loại: gán nhãn theo nhãn xuất hiện nhiều nhất (Majority Voting).
+        \item Hồi quy: lấy trung bình cộng giá trị của $K$ điểm lân cận.
+    \end{itemize}
+\end{enumerate}
+
+\section{Thử nghiệm}
+Ở đây ta thử nghiệm mô hình với bộ dữ liệu gồm 30 data . Ta sẽ dùng chúng để minh họa cho các thuật toán ở phần phía trên, bảng dữ liệu như sau.
+\begin{table}[H]
+\centering
+\begin{tabular}{|c|c|c|c|c|}
+\hline
+\textbf{STT} & \textbf{Age} & \textbf{Income} & \textbf{Tenure} & \textbf{Custcat} \\ \hline
+1  & 1  & 2  & 1 & 1 \\ \hline
+2  & 2  & 2  & 1 & 1 \\ \hline
+3  & 2  & 3  & 2 & 1 \\ \hline
+4  & 3  & 3  & 1 & 1 \\ \hline
+5  & 1  & 3  & 2 & 1 \\ \hline
+6  & 3  & 4  & 2 & 1 \\ \hline
+7  & 2  & 4  & 1 & 1 \\ \hline
+8  & 4  & 3  & 2 & 1 \\ \hline
+9  & 3  & 5  & 2 & 2 \\ \hline
+10 & 4  & 5  & 3 & 2 \\ \hline
+11 & 5  & 5  & 3 & 2 \\ \hline
+12 & 4  & 6  & 3 & 2 \\ \hline
+13 & 5  & 6  & 2 & 2 \\ \hline
+14 & 6  & 5  & 3 & 2 \\ \hline
+15 & 5  & 4  & 3 & 2 \\ \hline
+16 & 6  & 6  & 3 & 2 \\ \hline
+17 & 6  & 7  & 3 & 3 \\ \hline
+18 & 7  & 7  & 4 & 3 \\ \hline
+19 & 7  & 8  & 4 & 3 \\ \hline
+20 & 8  & 7  & 4 & 3 \\ \hline
+21 & 6  & 8  & 3 & 3 \\ \hline
+22 & 8  & 8  & 4 & 3 \\ \hline
+23 & 8  & 9  & 4 & 4 \\ \hline
+24 & 9  & 9  & 5 & 4 \\ \hline
+25 & 9  & 10 & 5 & 4 \\ \hline
+26 & 10 & 9  & 5 & 4 \\ \hline
+27 & 8  & 10 & 4 & 4 \\ \hline
+28 & 10 & 10 & 5 & 4 \\ \hline
+29 & 9  & 8  & 5 & 4 \\ \hline
+30 & 10 & 8  & 4 & 4 \\ \hline
+\end{tabular}
+\caption{Dữ liệu khách hàng trước khi chuẩn hóa}
+\end{table}
+
+Ta có bộ dữ liệu test như sau
+\begin{table}[h]
+\centering
+\begin{tabular}{|c|c|c|c|}
+\hline
+\textbf{STT} & \textbf{Age} & \textbf{Income} & \textbf{Tenure} \\ \hline
+1 & 3 & 4 & 2 \\ \hline
+2 & 5 & 5 & 3 \\ \hline
+3 & 7 & 8 & 4 \\ \hline
+4 & 9 & 9 & 5 \\ \hline
+\end{tabular}
+\caption{Bộ dữ liệu Test (Original)}
+\end{table}
+\subsection{Tính với Euclidean}
+Ta sử dụng công thức tính Q1,Q2,Q3 cho Age
+
+Với Q1:
+\[
+pos=(n-1)*q=(30-1)*0.25=7.25
+\] 
+nên Q1 sẽ nằm trong khoảng $x_7$ và $x_8$ nên ta có:
+\[
+Q_1=x_7+(pos-7)(x_8-x_7)=2+0.25*(4-2)=2.5
+\] 
+
+Với Q2:
+\[
+Q_2=\frac{x_{15}+x_{16}}{2}=\frac{5+6}{2}=5.5
+\] 
+
+Với Q3
+\[
+pos=(30-1)*0.75=21.75
+\] 
+\[
+Q_3=x_{21}+(pos-21)(x_{22}-x_{21})=6+0.75*2=7.5
+\]
+Từ đó:
+\[
+IQR=Q_3-Q_1=7.5-2.5=5
+\] 
+nên
+\[
+Age_{scaled}=\frac{Age-5.5}{5}
+\]
+Một cách tương tự với Income và Tenture
+\begin{itemize}
+    \item $Age_{scaled} = \frac{Age - 5.5}{5}$
+    \item $Income_{scaled} = \frac{Income - 5}{4.25}$
+    \item $Tenure_{scaled} = \frac{Tenure - 3}{2}$
+\end{itemize}
+\begin{table}[h]
+\centering
+
+\begin{tabular}{|c|c|c|c|c|}
+\hline
+\textbf{STT} & \textbf{Age Scaled} & \textbf{Income Scaled} & \textbf{Tenure Scaled} & \textbf{Custcat} \\ \hline
+1  & -0.9 & -0.7059 & -1.0 & 1 \\ \hline
+2  & -0.7 & -0.7059 & -1.0 & 1 \\ \hline
+3  & -0.7 & -0.4706 & -0.5 & 1 \\ \hline
+4  & -0.5 & -0.4706 & -1.0 & 1 \\ \hline
+5  & -0.9 & -0.4706 & -0.5 & 1 \\ \hline
+6  & -0.5 & -0.2353 & -0.5 & 1 \\ \hline
+7  & -0.7 & -0.2353 & -1.0 & 1 \\ \hline
+8  & -0.3 & -0.4706 & -0.5 & 1 \\ \hline
+9  & -0.5 & 0.0000  & -0.5 & 2 \\ \hline
+10 & -0.3 & 0.0000  & 0.0  & 2 \\ \hline
+11 & -0.1 & 0.0000  & 0.0  & 2 \\ \hline
+12 & -0.3 & 0.2353  & 0.0  & 2 \\ \hline
+13 & -0.1 & 0.2353  & -0.5 & 2 \\ \hline
+14 & 0.1  & 0.0000  & 0.0  & 2 \\ \hline
+15 & -0.1 & -0.2353 & 0.0  & 2 \\ \hline
+16 & 0.1  & 0.2353  & 0.0  & 2 \\ \hline
+17 & 0.1  & 0.4706  & 0.0  & 3 \\ \hline
+18 & 0.3  & 0.4706  & 0.5  & 3 \\ \hline
+19 & 0.3  & 0.7059  & 0.5  & 3 \\ \hline
+20 & 0.5  & 0.4706  & 0.5  & 3 \\ \hline
+21 & 0.1  & 0.7059  & 0.0  & 3 \\ \hline
+22 & 0.5  & 0.7059  & 0.5  & 3 \\ \hline
+23 & 0.5  & 0.9412  & 0.5  & 4 \\ \hline
+24 & 0.7  & 0.9412  & 1.0  & 4 \\ \hline
+25 & 0.7  & 1.1765  & 1.0  & 4 \\ \hline
+26 & 0.9  & 0.9412  & 1.0  & 4 \\ \hline
+27 & 0.5  & 1.1765  & 0.5  & 4 \\ \hline
+28 & 0.9  & 1.1765  & 1.0  & 4 \\ \hline
+29 & 0.7  & 0.7059  & 1.0  & 4 \\ \hline
+30 & 0.9  & 0.7059  & 0.5  & 4 \\ \hline
+\end{tabular}
+\caption{Dữ liệu sau khi chuẩn hóa với thông số mới}
+\end{table}
+\newpage
+\textbf{Giai đoạn Validation với phương pháp K-Fold} 
+\textbf{Chi tiết phân chia tập dữ liệu (5-Fold Cross Validation)}
+Để thực hiện 5-Fold Cross Validation với xáo trộn ngẫu nhiên (Shuffle), 30 mẫu dữ liệu ban đầu được xáo trộn và chia đều thành 5 phần (Fold), mỗi phần gồm 6 mẫu. Cấu trúc phân chia ngẫu nhiên cụ thể trong trường hợp này như sau:
+
+\begin{itemize}
+    \item \textbf{Fold 1:} Gồm các mẫu STT \{3, 4, 10, 12, 21, 30\}
+    \item \textbf{Fold 2:} Gồm các mẫu STT \{5, 6, 14, 18, 22, 27\}
+    \item \textbf{Fold 3:} Gồm các mẫu STT \{2, 8, 15, 17, 26, 29\}
+    \item \textbf{Fold 4:} Gồm các mẫu STT \{1, 11, 13, 19, 23, 24\}
+    \item \textbf{Fold 5:} Gồm các mẫu STT \{7, 9, 16, 20, 25, 28\}
+\end{itemize}
+
+\textbf{Quy trình lặp Huấn luyện (Train) và Kiểm thử (Test)}
+Quá trình đánh giá mô hình KNN sẽ diễn ra qua 5 lượt lặp độc lập. Ở mỗi lượt, một Fold được rút ra làm tập Kiểm thử (chưa biết nhãn) và 4 Fold còn lại được gộp thành tập Huấn luyện. Cụ thể:
+
+\begin{itemize}
+    \item \textbf{Lượt 1:} Dùng Fold 1 làm tập Kiểm thử (Test set). Tập Huấn luyện (Train set) gồm 24 mẫu thuộc Fold 2, 3, 4, 5. Các mẫu trong Fold 1 sẽ chỉ tìm láng giềng trong 24 mẫu này.
+    \item \textbf{Lượt 2:} Dùng Fold 2 làm tập Kiểm thử (Test set). Tập Huấn luyện (Train set) gồm 24 mẫu thuộc Fold 1, 3, 4, 5.
+    \item \textbf{Lượt 3:} Dùng Fold 3 làm tập Kiểm thử (Test set). Tập Huấn luyện (Train set) gồm 24 mẫu thuộc Fold 1, 2, 4, 5.
+    \item \textbf{Lượt 4:} Dùng Fold 4 làm tập Kiểm thử (Test set). Tập Huấn luyện (Train set) gồm 24 mẫu thuộc Fold 1, 2, 3, 5.
+    \item \textbf{Lượt 5:} Dùng Fold 5 làm tập Kiểm thử (Test set). Tập Huấn luyện (Train set) gồm 24 mẫu thuộc Fold 1, 2, 3, 4.
+\end{itemize}
+
+Kết thúc 5 lượt, toàn bộ 30 mẫu đều được dự đoán đúng một lần duy nhất với tư cách là dữ liệu Kiểm thử (Test). Kết quả dự đoán của 30 mẫu này sau đó được dùng để tính toán độ chính xác tổng thể (Accuracy) cho từng giá trị K.
+\textbf{Ví dụ tính toán cho STT 1 trong 5-Fold CV}
+Mẫu kiểm tra là STT 1: $x_1 = (-0.9, -0.7059, -1.0)$, nhãn thực tế $y_1 = 1$. Mẫu này nằm ở Fold 4, nên tập Train gồm 24 mẫu thuộc Fold 1, 2, 3, 5.
+
+Trong tập Train, tính khoảng cách Euclidean từ $x_1$ đến các mẫu, ta tìm được các láng giềng gần nhất:
+\begin{itemize}
+    \item Láng giềng 1 (STT 2, thuộc Fold 3): 
+    $$d(x_1, x_2) = \sqrt{(-0.9 - (-0.7))^2 + (-0.7059 - (-0.7059))^2 + (-1.0 - (-1.0))^2} = 0.2000$$
+    Nhãn: $y_2 = 1$.
+    
+    \item Láng giềng 2 (STT 4, thuộc Fold 1): 
+    $$d(x_1, x_4) = \sqrt{(-0.4)^2 + (-0.2353)^2 + 0^2} \approx 0.4641$$
+    Nhãn: $y_4 = 1$.
+    
+    \item Láng giềng 3 (STT 7, thuộc Fold 5): 
+    $$d(x_1, x_7) = \sqrt{(-0.2)^2 + (-0.4706)^2 + 0^2} \approx 0.5113$$
+    Nhãn: $y_7 = 1$.
+\end{itemize}
+
+Dự đoán đa số (Majority Voting) cho K=3:
+$$Y_3 = \{1, 1, 1\} \implies \hat{y}_1 = \text{Mode}(1,1,1) = 1 \text{ (Đúng)}$$ 
+\begin{table}[H]
+\centering
+\caption{Kết quả dự đoán 5-Fold Cross Validation cho 30 mẫu}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{|c|c|c|c|c|c|c|}
+\hline
+\textbf{STT} & \textbf{Fold Test} & \textbf{Nhãn thực tế} & \textbf{3 Láng giềng gần nhất (thuộc Train)} & \textbf{Dự đoán K=1} & \textbf{Dự đoán K=3} & \textbf{Dự đoán K=5} \\ \hline
+1 & 4 & 1 & STT 2, 4, 7 & 1 & 1 & 1 \\ \hline
+2 & 3 & 1 & STT 1, 4, 7 & 1 & 1 & 1 \\ \hline
+3 & 1 & 1 & STT 5, 6, 8 & 1 & 1 & 1 \\ \hline
+4 & 1 & 1 & STT 2, 7, 1 & 1 & 1 & 1 \\ \hline
+5 & 2 & 1 & STT 3, 1, 2 & 1 & 1 & 1 \\ \hline
+6 & 2 & 1 & STT 9, 3, 8 & 2 (Sai) & 1 & 1 \\ \hline
+7 & 5 & 1 & STT 4, 2, 1 & 1 & 1 & 1 \\ \hline
+8 & 3 & 1 & STT 6, 3, 9 & 1 & 1 & 1 \\ \hline
+9 & 5 & 2 & STT 6, 13, 3 & 1 (Sai) & 1 (Sai) & 1 (Sai) \\ \hline
+10 & 1 & 2 & STT 11, 15, 14 & 2 & 2 & 2 \\ \hline
+11 & 4 & 2 & STT 10, 14, 15 & 2 & 2 & 2 \\ \hline
+12 & 1 & 2 & STT 11, 16, 17 & 2 & 2 & 2 \\ \hline
+13 & 4 & 2 & STT 9, 12, 16 & 2 & 2 & 2 \\ \hline
+14 & 2 & 2 & STT 11, 16, 15 & 2 & 2 & 2 \\ \hline
+15 & 3 & 2 & STT 11, 10, 14 & 2 & 2 & 2 \\ \hline
+16 & 5 & 2 & STT 14, 17, 11 & 2 & 2 & 2 \\ \hline
+17 & 3 & 3 & STT 21, 16, 12 & 3 & 2 (Sai) & 2 (Sai) \\ \hline
+18 & 2 & 3 & STT 20, 19, 23 & 3 & 3 & 3 \\ \hline
+19 & 4 & 3 & STT 22, 18, 20 & 3 & 3 & 3 \\ \hline
+20 & 5 & 3 & STT 18, 22, 19 & 3 & 3 & 3 \\ \hline
+21 & 1 & 3 & STT 17, 16, 19 & 3 & 3 & 3 \\ \hline
+22 & 2 & 3 & STT 19, 20, 23 & 3 & 3 & 4 (Sai) \\ \hline
+23 & 4 & 4 & STT 27, 22, 30 & 4 & 4 & 3 (Sai) \\ \hline
+24 & 4 & 4 & STT 26, 25, 29 & 4 & 4 & 4 \\ \hline
+25 & 5 & 4 & STT 24, 26, 29 & 4 & 4 & 4 \\ \hline
+26 & 3 & 4 & STT 24, 28, 25 & 4 & 4 & 4 \\ \hline
+27 & 2 & 4 & STT 23, 19, 25 & 4 & 4 & 4 \\ \hline
+28 & 5 & 4 & STT 26, 24, 29 & 4 & 4 & 4 \\ \hline
+29 & 3 & 4 & STT 24, 25, 28 & 4 & 4 & 4 \\ \hline
+30 & 1 & 4 & STT 22, 20, 23 & 3 (Sai) & 3 (Sai) & 4 \\ \hline
+\end{tabular}%
+}
+\end{table}
+
+\textbf{Tổng kết Độ chính xác (Accuracy):}
+\begin{itemize}
+    \item \textbf{K=1:} Dự đoán đúng 26/30 mẫu $\implies Acc = \frac{26}{30} \approx 0.8667$
+    \item \textbf{K=3:} Dự đoán đúng 27/30 mẫu $\implies Acc = \frac{27}{30} = 0.9000$
+    \item \textbf{K=5:} Dự đoán đúng 26/30 mẫu $\implies Acc = \frac{26}{30} \approx 0.8667$
+\end{itemize}
+\textbf{Giai đoạn mô hình đưa ra dự đoạn nhãn} 
+\begin{table}[H]
+\centering
+\begin{tabular}{|c|c|c|c|}
+\hline
+\textbf{STT} & \textbf{Age Scaled} & \textbf{Income Scaled} & \textbf{Tenure Scaled} \\ \hline
+1 & -0.5 & -0.2353 & -0.5 \\ \hline
+2 & -0.1 & 0.0000 & 0.0 \\ \hline
+3 & 0.3 & 0.7059 & 0.5 \\ \hline
+4 & 0.7 & 0.9412 & 1.0 \\ \hline
+\end{tabular}
+\caption{Dữ liệu test thu gọn sau khi chuẩn hóa}
+\end{table}
+
+Ở đây ta sẽ sử dụng công thức tính toán trọng số được trình bày ở phía trên cộng với công thức tính khoảng cách Euclidean. 
+Ta có thể lấy ví dụ với dữ liệu Train thứ 1 (-0.9,0.7059,-1.0)
+
+Khoảng cách Euclidean được tính như sau
+\[
+d(AgeTest_1,Age_1)=\sqrt{(-0.5+0.9)^2+(-0.2353+0.7059)^2+(-0.5+1)^2}=0.7946
+\]
+\newline
+Từ đó ta suy ra được trọng số
+\[
+w=\frac{1}{d(AgeTest_1,Age_1)+10^{-5}}\approx1.2584
+\] 
+Một cách tương tự , ta có bảng tổng hợp các tính như sau
+
+\textbf{Mẫu Test 1: $x_{t1} = (-0.5, -0.2353, -0.5)$}
+\begin{table}[H]
+\centering
+\footnotesize
+\renewcommand{\arraystretch}{0.85}
+\begin{tabular}{|c|c|c|c|c|}
+\hline
+\textbf{STT Train} & \textbf{Tọa độ Train} & \textbf{Nhãn} & \textbf{Khoảng cách ($d$)} & \textbf{Trọng số ($w$)} \\ \hline
+1 & $(-0.9, -0.7059, -1.0)$ & 1 & 0.7946 & 1.2584 \\ \hline
+2 & $(-0.7, -0.7059, -1.0)$ & 1 & 0.7152 & 1.3983 \\ \hline
+\textbf{3} & $\mathbf{(-0.7, -0.4706, -0.5)}$ & \textbf{1} & \textbf{0.3088} & \textbf{3.2381} \\ \hline
+4 & $(-0.5, -0.4706, -1.0)$ & 1 & 0.5526 & 1.8096 \\ \hline
+5 & $(-0.9, -0.4706, -0.5)$ & 1 & 0.4641 & 2.1548 \\ \hline
+\textbf{6} & $\mathbf{(-0.5, -0.2353, -0.5)}$ & \textbf{1} & \textbf{0.0000} & \textbf{100000.0000} \\ \hline
+7 & $(-0.7, -0.2353, -1.0)$ & 1 & 0.5385 & 1.8569 \\ \hline
+8 & $(-0.3, -0.4706, -0.5)$ & 1 & 0.3088 & 3.2381 \\ \hline
+\textbf{9} & $\mathbf{(-0.5, 0.0000, -0.5)}$ & \textbf{2} & \textbf{0.2353} & \textbf{4.2497} \\ \hline
+10 & $(-0.3, 0.0000, 0.0)$ & 2 & 0.5877 & 1.7016 \\ \hline
+11 & $(-0.1, 0.0000, 0.0)$ & 2 & 0.6822 & 1.4659 \\ \hline
+12 & $(-0.3, 0.2353, 0.0)$ & 2 & 0.7152 & 1.3983 \\ \hline
+13 & $(-0.1, 0.2353, -0.5)$ & 2 & 0.6176 & 1.6191 \\ \hline
+14 & $(0.1, 0.0000, 0.0)$ & 2 & 0.8157 & 1.2259 \\ \hline
+15 & $(-0.1, -0.2353, 0.0)$ & 2 & 0.6403 & 1.5617 \\ \hline
+16 & $(0.1, 0.2353, 0.0)$ & 2 & 0.9118 & 1.0967 \\ \hline
+17 & $(0.1, 0.4706, 0.0)$ & 3 & 1.0528 & 0.9499 \\ \hline
+18 & $(0.3, 0.4706, 0.5)$ & 3 & 1.4623 & 0.6839 \\ \hline
+19 & $(0.3, 0.7059, 0.5)$ & 3 & 1.5893 & 0.6292 \\ \hline
+20 & $(0.5, 0.4706, 0.5)$ & 3 & 1.5806 & 0.6327 \\ \hline
+21 & $(0.1, 0.7059, 0.0)$ & 3 & 1.2231 & 0.8176 \\ \hline
+22 & $(0.5, 0.7059, 0.5)$ & 3 & 1.6988 & 0.5887 \\ \hline
+23 & $(0.5, 0.9412, 0.5)$ & 4 & 1.8396 & 0.5436 \\ \hline
+24 & $(0.7, 0.9412, 1.0)$ & 4 & 2.2526 & 0.4439 \\ \hline
+25 & $(0.7, 1.1765, 1.0)$ & 4 & 2.3839 & 0.4195 \\ \hline
+26 & $(0.9, 0.9412, 1.0)$ & 4 & 2.3652 & 0.4228 \\ \hline
+27 & $(0.5, 1.1765, 0.5)$ & 4 & 1.9983 & 0.5004 \\ \hline
+28 & $(0.9, 1.1765, 1.0)$ & 4 & 2.4906 & 0.4015 \\ \hline
+29 & $(0.7, 0.7059, 1.0)$ & 4 & 2.1391 & 0.4675 \\ \hline
+30 & $(0.9, 0.7059, 0.5)$ & 4 & 1.9611 & 0.5099 \\ \hline
+\end{tabular}
+\end{table}
+
+\textbf{Kết luận Mẫu Test 1:} 3 Láng giềng gần nhất là STT 6 (Nhãn 1, d=0.0000), STT 9 (Nhãn 2, d=0.2353), STT 3 (Nhãn 1, d=0.3088).
+\begin{itemize}
+    \item Tổng trọng số Class 1 = $100000.0000 + 3.2381 = 100003.2381$
+    \item Tổng trọng số Class 2 = $4.2497$
+\end{itemize}
+$\implies$ \textbf{Dự đoán: Class 1}
+
+\newpage
+\textbf{Mẫu Test 2: $x_{t2} = (-0.1, 0.0000, 0.0)$}
+\begin{table}[H]
+\centering
+\footnotesize
+\renewcommand{\arraystretch}{0.85}
+\begin{tabular}{|c|c|c|c|c|}
+\hline
+\textbf{STT Train} & \textbf{Tọa độ Train} & \textbf{Nhãn} & \textbf{Khoảng cách ($d$)} & \textbf{Trọng số ($w$)} \\ \hline
+1 & $(-0.9, -0.7059, -1.0)$ & 1 & 1.4623 & 0.6839 \\ \hline
+2 & $(-0.7, -0.7059, -1.0)$ & 1 & 1.3632 & 0.7336 \\ \hline
+3 & $(-0.7, -0.4706, -0.5)$ & 1 & 0.9118 & 1.0967 \\ \hline
+4 & $(-0.5, -0.4706, -1.0)$ & 1 & 1.1754 & 0.8508 \\ \hline
+5 & $(-0.9, -0.4706, -0.5)$ & 1 & 1.0543 & 0.9485 \\ \hline
+6 & $(-0.5, -0.2353, -0.5)$ & 1 & 0.6822 & 1.4659 \\ \hline
+7 & $(-0.7, -0.2353, -1.0)$ & 1 & 1.1897 & 0.8405 \\ \hline
+8 & $(-0.3, -0.4706, -0.5)$ & 1 & 0.7152 & 1.3983 \\ \hline
+9 & $(-0.5, 0.0000, -0.5)$ & 2 & 0.6403 & 1.5617 \\ \hline
+\textbf{10} & $\mathbf{(-0.3, 0.0000, 0.0)}$ & \textbf{2} & \textbf{0.2000} & \textbf{4.9998} \\ \hline
+\textbf{11} & $\mathbf{(-0.1, 0.0000, 0.0)}$ & \textbf{2} & \textbf{0.0000} & \textbf{100000.0000} \\ \hline
+12 & $(-0.3, 0.2353, 0.0)$ & 2 & 0.3088 & 3.2381 \\ \hline
+13 & $(-0.1, 0.2353, -0.5)$ & 2 & 0.5526 & 1.8096 \\ \hline
+\textbf{14} & $\mathbf{(0.1, 0.0000, 0.0)}$ & \textbf{2} & \textbf{0.2000} & \textbf{4.9998} \\ \hline
+15 & $(-0.1, -0.2353, 0.0)$ & 2 & 0.2353 & 4.2497 \\ \hline
+16 & $(0.1, 0.2353, 0.0)$ & 2 & 0.3088 & 3.2381 \\ \hline
+17 & $(0.1, 0.4706, 0.0)$ & 3 & 0.5113 & 1.9556 \\ \hline
+18 & $(0.3, 0.4706, 0.5)$ & 3 & 0.7946 & 1.2584 \\ \hline
+19 & $(0.3, 0.7059, 0.5)$ & 3 & 0.9530 & 1.0493 \\ \hline
+20 & $(0.5, 0.4706, 0.5)$ & 3 & 0.9118 & 1.0967 \\ \hline
+21 & $(0.1, 0.7059, 0.0)$ & 3 & 0.7337 & 1.3630 \\ \hline
+22 & $(0.5, 0.7059, 0.5)$ & 3 & 1.0528 & 0.9499 \\ \hline
+23 & $(0.5, 0.9412, 0.5)$ & 4 & 1.2231 & 0.8176 \\ \hline
+24 & $(0.7, 0.9412, 1.0)$ & 4 & 1.5893 & 0.6292 \\ \hline
+25 & $(0.7, 1.1765, 1.0)$ & 4 & 1.7390 & 0.5750 \\ \hline
+26 & $(0.9, 0.9412, 1.0)$ & 4 & 1.6988 & 0.5887 \\ \hline
+27 & $(0.5, 1.1765, 0.5)$ & 4 & 1.4121 & 0.7081 \\ \hline
+28 & $(0.9, 1.1765, 1.0)$ & 4 & 1.8396 & 0.5436 \\ \hline
+29 & $(0.7, 0.7059, 1.0)$ & 4 & 1.4623 & 0.6839 \\ \hline
+30 & $(0.9, 0.7059, 0.5)$ & 4 & 1.3222 & 0.7563 \\ \hline
+\end{tabular}
+\end{table}
+
+\textbf{Kết luận Mẫu Test 2:} 3 Láng giềng gần nhất là STT 11 (Nhãn 2, d=0.0000), STT 10 (Nhãn 2, d=0.2000), STT 14 (Nhãn 2, d=0.2000).
+\begin{itemize}
+    \item Tổng trọng số Class 2 = $100000.0000 + 9.9995 = 100009.9995$
+\end{itemize}
+$\implies$ \textbf{Dự đoán: Class 2}
+
+\newpage
+\textbf{Mẫu Test 3: $x_{t3} = (0.3, 0.7059, 0.5)$}
+\begin{table}[H]
+\centering
+\footnotesize
+\renewcommand{\arraystretch}{0.85}
+\begin{tabular}{|c|c|c|c|c|}
+\hline
+\textbf{STT Train} & \textbf{Tọa độ Train} & \textbf{Nhãn} & \textbf{Khoảng cách ($d$)} & \textbf{Trọng số ($w$)} \\ \hline
+1 & $(-0.9, -0.7059, -1.0)$ & 1 & 2.3839 & 0.4195 \\ \hline
+2 & $(-0.7, -0.7059, -1.0)$ & 1 & 2.2898 & 0.4367 \\ \hline
+3 & $(-0.7, -0.4706, -0.5)$ & 1 & 1.8396 & 0.5436 \\ \hline
+4 & $(-0.5, -0.4706, -1.0)$ & 1 & 2.0674 & 0.4837 \\ \hline
+5 & $(-0.9, -0.4706, -0.5)$ & 1 & 1.9555 & 0.5114 \\ \hline
+6 & $(-0.5, -0.2353, -0.5)$ & 1 & 1.5893 & 0.6292 \\ \hline
+7 & $(-0.7, -0.2353, -1.0)$ & 1 & 2.0337 & 0.4917 \\ \hline
+8 & $(-0.3, -0.4706, -0.5)$ & 1 & 1.6565 & 0.6037 \\ \hline
+9 & $(-0.5, 0.0000, -0.5)$ & 2 & 1.4623 & 0.6839 \\ \hline
+10 & $(-0.3, 0.0000, 0.0)$ & 2 & 1.0528 & 0.9499 \\ \hline
+11 & $(-0.1, 0.0000, 0.0)$ & 2 & 0.9530 & 1.0493 \\ \hline
+12 & $(-0.3, 0.2353, 0.0)$ & 2 & 0.9118 & 1.0967 \\ \hline
+13 & $(-0.1, 0.2353, -0.5)$ & 2 & 1.1754 & 0.8508 \\ \hline
+14 & $(0.1, 0.0000, 0.0)$ & 2 & 0.8879 & 1.1263 \\ \hline
+15 & $(-0.1, -0.2353, 0.0)$ & 2 & 1.1384 & 0.8785 \\ \hline
+16 & $(0.1, 0.2353, 0.0)$ & 2 & 0.7152 & 1.3983 \\ \hline
+17 & $(0.1, 0.4706, 0.0)$ & 3 & 0.5877 & 1.7016 \\ \hline
+\textbf{18} & $\mathbf{(0.3, 0.4706, 0.5)}$ & \textbf{3} & \textbf{0.2353} & \textbf{4.2497} \\ \hline
+\textbf{19} & $\mathbf{(0.3, 0.7059, 0.5)}$ & \textbf{3} & \textbf{0.0000} & \textbf{100000.0000} \\ \hline
+20 & $(0.5, 0.4706, 0.5)$ & 3 & 0.3088 & 3.2381 \\ \hline
+21 & $(0.1, 0.7059, 0.0)$ & 3 & 0.5385 & 1.8569 \\ \hline
+\textbf{22} & $\mathbf{(0.5, 0.7059, 0.5)}$ & \textbf{3} & \textbf{0.2000} & \textbf{4.9998} \\ \hline
+23 & $(0.5, 0.9412, 0.5)$ & 4 & 0.3088 & 3.2381 \\ \hline
+24 & $(0.7, 0.9412, 1.0)$ & 4 & 0.6822 & 1.4659 \\ \hline
+25 & $(0.7, 1.1765, 1.0)$ & 4 & 0.7946 & 1.2584 \\ \hline
+26 & $(0.9, 0.9412, 1.0)$ & 4 & 0.8157 & 1.2259 \\ \hline
+27 & $(0.5, 1.1765, 0.5)$ & 4 & 0.5113 & 1.9556 \\ \hline
+28 & $(0.9, 1.1765, 1.0)$ & 4 & 0.9118 & 1.0967 \\ \hline
+29 & $(0.7, 0.7059, 1.0)$ & 4 & 0.6403 & 1.5617 \\ \hline
+30 & $(0.9, 0.7059, 0.5)$ & 4 & 0.6000 & 1.6666 \\ \hline
+\end{tabular}
+\end{table}
+
+\textbf{Kết luận Mẫu Test 3:} 3 Láng giềng gần nhất là STT 19 (Nhãn 3, d=0.0000), STT 22 (Nhãn 3, d=0.2000), STT 18 (Nhãn 3, d=0.2353).
+\begin{itemize}
+    \item Tổng trọng số Class 3 = $100000.0000 + 9.2495 = 100009.2495$
+\end{itemize}
+$\implies$ \textbf{Dự đoán: Class 3}
+
+\newpage
+\textbf{Mẫu Test 4: $x_{t4} = (0.7, 0.9412, 1.0)$}
+\begin{table}[H]
+\centering
+\footnotesize
+\renewcommand{\arraystretch}{0.85}
+\begin{tabular}{|c|c|c|c|c|}
+\hline
+\textbf{STT Train} & \textbf{Tọa độ Train} & \textbf{Nhãn} & \textbf{Khoảng cách ($d$)} & \textbf{Trọng số ($w$)} \\ \hline
+1 & $(-0.9, -0.7059, -1.0)$ & 1 & 3.0451 & 0.3284 \\ \hline
+2 & $(-0.7, -0.7059, -1.0)$ & 1 & 2.9450 & 0.3396 \\ \hline
+3 & $(-0.7, -0.4706, -0.5)$ & 1 & 2.4906 & 0.4015 \\ \hline
+4 & $(-0.5, -0.4706, -1.0)$ & 1 & 2.7264 & 0.3668 \\ \hline
+5 & $(-0.9, -0.4706, -0.5)$ & 1 & 2.6083 & 0.3834 \\ \hline
+6 & $(-0.5, -0.2353, -0.5)$ & 1 & 2.2526 & 0.4439 \\ \hline
+7 & $(-0.7, -0.2353, -1.0)$ & 1 & 2.7100 & 0.3690 \\ \hline
+8 & $(-0.3, -0.4706, -0.5)$ & 1 & 2.2898 & 0.4367 \\ \hline
+9 & $(-0.5, 0.0000, -0.5)$ & 2 & 2.1391 & 0.4675 \\ \hline
+10 & $(-0.3, 0.0000, 0.0)$ & 2 & 1.6988 & 0.5887 \\ \hline
+11 & $(-0.1, 0.0000, 0.0)$ & 2 & 1.5893 & 0.6292 \\ \hline
+12 & $(-0.3, 0.2353, 0.0)$ & 2 & 1.5806 & 0.6327 \\ \hline
+13 & $(-0.1, 0.2353, -0.5)$ & 2 & 1.8407 & 0.5433 \\ \hline
+14 & $(0.1, 0.0000, 0.0)$ & 2 & 1.4986 & 0.6673 \\ \hline
+15 & $(-0.1, -0.2353, 0.0)$ & 2 & 1.7390 & 0.5750 \\ \hline
+16 & $(0.1, 0.2353, 0.0)$ & 2 & 1.3632 & 0.7336 \\ \hline
+17 & $(0.1, 0.4706, 0.0)$ & 3 & 1.2576 & 0.7952 \\ \hline
+18 & $(0.3, 0.4706, 0.5)$ & 3 & 0.7946 & 1.2584 \\ \hline
+19 & $(0.3, 0.7059, 0.5)$ & 3 & 0.6822 & 1.4659 \\ \hline
+20 & $(0.5, 0.4706, 0.5)$ & 3 & 0.7152 & 1.3983 \\ \hline
+21 & $(0.1, 0.7059, 0.0)$ & 3 & 1.1897 & 0.8405 \\ \hline
+22 & $(0.5, 0.7059, 0.5)$ & 3 & 0.5877 & 1.7016 \\ \hline
+23 & $(0.5, 0.9412, 0.5)$ & 4 & 0.5385 & 1.8569 \\ \hline
+\textbf{24} & $\mathbf{(0.7, 0.9412, 1.0)}$ & \textbf{4} & \textbf{0.0000} & \textbf{100000.0000} \\ \hline
+\textbf{25} & $\mathbf{(0.7, 1.1765, 1.0)}$ & \textbf{4} & \textbf{0.2353} & \textbf{4.2497} \\ \hline
+\textbf{26} & $\mathbf{(0.9, 0.9412, 1.0)}$ & \textbf{4} & \textbf{0.2000} & \textbf{4.9998} \\ \hline
+27 & $(0.5, 1.1765, 0.5)$ & 4 & 0.5877 & 1.7016 \\ \hline
+28 & $(0.9, 1.1765, 1.0)$ & 4 & 0.3088 & 3.2381 \\ \hline
+29 & $(0.7, 0.7059, 1.0)$ & 4 & 0.2353 & 4.2497 \\ \hline
+30 & $(0.9, 0.7059, 0.5)$ & 4 & 0.5877 & 1.7016 \\ \hline
+\end{tabular}
+\end{table}
+
+\textbf{Kết luận Mẫu Test 4:} 3 Láng giềng gần nhất là STT 24 (Nhãn 4, d=0.0000), STT 26 (Nhãn 4, d=0.2000), STT 25 (Nhãn 4, d=0.2353).
+\begin{itemize}
+    \item Tổng trọng số Class 4 = $100000.0000 + 9.2495 = 100009.2495$
+\end{itemize}
+$\implies$ \textbf{Dự đoán: Class 4}
+\subsection{Dự đoán theo độ tương đồng Cosine}
+Đầu tiên ta sẽ scale bộ Data theo chuẩn hóa L2
+\begin{table}[H]
+\centering
+\begin{tabular}{|c|c|c|c|c|}
+\hline
+\textbf{STT} & \textbf{L2 Age} & \textbf{L2 Income} & \textbf{L2 Tenure} & \textbf{Custcat} \\ \hline
+1  & 0.4082 & 0.8165 & 0.4082 & 1 \\ \hline
+2  & 0.6667 & 0.6667 & 0.3333 & 1 \\ \hline
+3  & 0.4851 & 0.7276 & 0.4851 & 1 \\ \hline
+4  & 0.6882 & 0.6882 & 0.2294 & 1 \\ \hline
+5  & 0.2673 & 0.8018 & 0.5345 & 1 \\ \hline
+6  & 0.5571 & 0.7428 & 0.3714 & 1 \\ \hline
+7  & 0.4364 & 0.8729 & 0.2182 & 1 \\ \hline
+8  & 0.7428 & 0.5571 & 0.3714 & 1 \\ \hline
+9  & 0.4867 & 0.8111 & 0.3244 & 2 \\ \hline
+10 & 0.5657 & 0.7071 & 0.4243 & 2 \\ \hline
+11 & 0.6492 & 0.6492 & 0.3895 & 2 \\ \hline
+12 & 0.5122 & 0.7682 & 0.3841 & 2 \\ \hline
+13 & 0.6155 & 0.7385 & 0.2462 & 2 \\ \hline
+14 & 0.7107 & 0.5922 & 0.3553 & 2 \\ \hline
+15 & 0.7071 & 0.5657 & 0.4243 & 2 \\ \hline
+16 & 0.6667 & 0.6667 & 0.3333 & 2 \\ \hline
+17 & 0.6155 & 0.7181 & 0.3077 & 3 \\ \hline
+18 & 0.6445 & 0.6445 & 0.3683 & 3 \\ \hline
+19 & 0.6150 & 0.7028 & 0.3514 & 3 \\ \hline
+20 & 0.7028 & 0.6150 & 0.3514 & 3 \\ \hline
+21 & 0.5735 & 0.7646 & 0.2867 & 3 \\ \hline
+22 & 0.6810 & 0.6810 & 0.3405 & 3 \\ \hline
+23 & 0.6325 & 0.7115 & 0.3162 & 4 \\ \hline
+24 & 0.6429 & 0.6429 & 0.3571 & 4 \\ \hline
+25 & 0.6285 & 0.6983 & 0.3491 & 4 \\ \hline
+26 & 0.6983 & 0.6285 & 0.3491 & 4 \\ \hline
+27 & 0.5963 & 0.7454 & 0.2981 & 4 \\ \hline
+28 & 0.6623 & 0.6623 & 0.3311 & 4 \\ \hline
+29 & 0.7153 & 0.6358 & 0.3974 & 4 \\ \hline
+30 & 0.7625 & 0.6100 & 0.3050 & 4 \\ \hline
+\end{tabular}
+\caption{Chuẩn hóa L2 Norm trực tiếp từ dữ liệu gốc}
+\end{table}
+\begin{table}[h]
+\centering
+\begin{tabular}{|c|c|c|c|}
+\hline
+\textbf{STT} & \textbf{L2 Age} & \textbf{L2 Income} & \textbf{L2 Tenure} \\ \hline
+1 & 0.5571 & 0.7428 & 0.3714 \\ \hline
+2 & 0.6492 & 0.6492 & 0.3895 \\ \hline
+3 & 0.6150 & 0.7028 & 0.3514 \\ \hline
+4 & 0.6429 & 0.6429 & 0.3571 \\ \hline
+\end{tabular}
+\caption{Bộ dữ liệu Test sau khi chuẩn hóa L2 Norm}
+\end{table}
+\subsubsection{Validation (K-fold) theo Cosine}
+Ta cũng sẽ phân random các data test thành 5-fold và thu được bảng như sau
+
+Giả sử ta lấy data test 1 ở Fold Test 3 , sau một hồi tính toán ta có 5 láng giếng gần nhất là 9,12,3,6,5 .
+
+Giả sử với K=1
+\[
+S_C(X_1,X_9)=\frac{(0.4082 \times 0.4867) + (0.8165 \times 0.8111) + (0.4082 \times 0.3244)}{\sqrt{0.4082^2+0.8165^2+0.4082^2} \times \sqrt{0.4867^2+0.8111^2+0.3244^2}}\approx 0.9622
+\]
+Thì 1 và 9 có độ tương đồng rất lớn nên mô hình sẽ dự đoán 1 có nhãn là 2 và đó là sai 
+
+Tương tự cách tính với các data còn lại
+\begin{table}[H]
+\centering
+\scriptsize
+\renewcommand{\arraystretch}{0.75}
+\begin{tabular}{|c|c|c|c|c|c|c|}
+\hline
+\textbf{STT} & \textbf{Fold Test} & \textbf{Nhãn thực tế} & \textbf{5 Láng giềng gần nhất (trong Train)} & \textbf{Dự đoán K=1} & \textbf{Dự đoán K=3} & \textbf{Dự đoán K=5} \\ \hline
+1 & 3 & 1 & STT 9, 12, 3, 6, 5 & 2 & 2 & 2 \\ \hline
+2 & 3 & 1 & STT 16, 28, 24, 18, 26 & 2 & 4 & 4 \\ \hline
+3 & 1 & 1 & STT 10, 12, 1, 19, 25 & 2 & 2 & 2 \\ \hline
+4 & 2 & 1 & STT 13, 23, 28, 2, 16 & 2 & 4 & 2 \\ \hline
+5 & 4 & 1 & STT 1, 3, 12, 9, 10 & \textbf{1(Đúng)} & \textbf{1(Đúng)} & \textbf{1(Đúng)} \\ \hline
+6 & 1 & 1 & STT 12, 10, 19, 27, 25 & 2 & 2 & 2 \\ \hline
+7 & 2 & 1 & STT 9, 21, 1, 12, 27 & 2 & 2 & 2 \\ \hline
+8 & 5 & 1 & STT 14, 20, 29, 30, 26 & 2 & 2 & 4 \\ \hline
+9 & 1 & 2 & STT 12, 21, 1, 27, 7 & \textbf{2(Đúng)} & \textbf{2(Đúng)} & \textbf{2(Đúng)} \\ \hline
+10 & 3 & 2 & STT 6, 19, 12, 25, 3 & 1 & 1 & 1 \\ \hline
+11 & 2 & 2 & STT 18, 24, 29, 22, 2 & 3 & 3 & 3 \\ \hline
+12 & 5 & 2 & STT 6, 9, 10, 3, 1 & 1 & 1 & 1 \\ \hline
+13 & 4 & 2 & STT 27, 21, 23, 4, 25 & 4 & 4 & 4 \\ \hline
+14 & 1 & 2 & STT 20, 26, 29, 8, 30 & 3 & 3 & 3 \\ \hline
+15 & 5 & 2 & STT 29, 14, 20, 26, 11 & 4 & 4 & 4 \\ \hline
+16 & 4 & 2 & STT 2, 28, 22, 24, 18 & 1 & 1 & 4 \\ \hline
+17 & 4 & 3 & STT 23, 27, 19, 25, 21 & 4 & 4 & 4 \\ \hline
+18 & 1 & 3 & STT 24, 11, 22, 16, 2 & 4 & 4 & 4 \\ \hline
+19 & 2 & 3 & STT 23, 17, 24, 22, 2 & 4 & 4 & 4 \\ \hline
+20 & 2 & 3 & STT 26, 14, 29, 24, 22 & 4 & 4 & 4 \\ \hline
+21 & 5 & 3 & STT 27, 13, 17, 23, 6 & 4 & 4 & 4 \\ \hline
+22 & 3 & 3 & STT 16, 28, 24, 18, 26 & 2 & 4 & 4 \\ \hline
+23 & 1 & 4 & STT 17, 25, 19, 27, 28 & 3 & 3 & 3 \\ \hline
+24 & 5 & 4 & STT 18, 11, 22, 2, 16 & 3 & 3 & 3 \\ \hline
+25 & 2 & 4 & STT 23, 17, 22, 2, 16 & \textbf{4(Đúng)} & 3 & 3 \\ \hline
+26 & 4 & 4 & STT 20, 14, 29, 22, 2 & 3 & 3 & 3 \\ \hline
+27 & 3 & 4 & STT 21, 17, 23, 13, 19 & 3 & 3 & 3 \\ \hline
+28 & 5 & 4 & STT 2, 16, 22, 18, 26 & 1 & 1 & 3 \\ \hline
+29 & 3 & 4 & STT 20, 26, 14, 11, 18 & 3 & 3 & 3 \\ \hline
+30 & 4 & 4 & STT 14, 20, 8, 29, 28 & 2 & 2 & 2 \\ \hline
+\end{tabular}
+\caption{Kết quả dự đoán 5-Fold CV (Khoảng cách Cosine, $w = 1/(D_C + 10^{-5})$)}
+\end{table}
+
+\textbf{Tổng kết Độ chính xác (Accuracy):}
+\begin{itemize}
+    \item \textbf{Với K=1:} Thuật toán dự đoán đúng 3/30 mẫu (STT 5, 9, 25) $\implies Acc = \frac{3}{30} = 0.1000$
+    \item \textbf{Với K=3:} Thuật toán dự đoán đúng 2/30 mẫu (STT 5, 9) $\implies Acc = \frac{2}{30} \approx 0.0667$
+    \item \textbf{Với K=5:} Thuật toán dự đoán đúng 2/30 mẫu (STT 5, 9) $\implies Acc = \frac{2}{30} \approx 0.0667$
+\end{itemize}
+\subsubsection{Dự đoán nhãn}
+% ================================================================
+% MẪU TEST 1
+% ================================================================
+\textbf{Mẫu Test 1: $x_{t1} = (0.5571,\ 0.7428,\ 0.3714)$}
+ 
+\vspace{0.3cm}
+Trước tiên, ta tính minh họa $S_C$, $D_C$ và trọng số $w$ cho 3 láng giềng gần nhất.
+ 
+\vspace{0.3cm}
+\textbf{Ví dụ 1 — Mẫu Train STT 6: $\mathbf{z}_6 = (0.5571,\ 0.7428,\ 0.3714)$, Nhãn 1.}
+\begin{itemize}
+    \item Tích vô hướng:
+    \[
+        \mathbf{z}_{t1} \cdot \mathbf{z}_6
+        = (0.5571)(0.5571) + (0.7428)(0.7428) + (0.3714)(0.3714) = 1.0000
+    \]
+    \item Vì dữ liệu đã chuẩn hóa L2 Norm nên $\|\mathbf{z}_{t1}\| = \|\mathbf{z}_6\| = 1.0000$, do đó:
+    \[
+        S_C = \frac{1.0000}{1.0000 \times 1.0000} = 1.0000, \quad
+        D_C = 1 - 1.0000 = 0.0000
+    \]
+    \item Trọng số (vì $D_C = 0$, dùng $\varepsilon = 10^{-5}$):
+    \[
+        w_6 = \frac{1}{D_C + \varepsilon} = \frac{1}{10^{-5}} = 100000.0000
+    \]
+\end{itemize}
+ 
+\textbf{Ví dụ 2 — Mẫu Train STT 12: $\mathbf{z}_{12} = (0.5122,\ 0.7682,\ 0.3841)$, Nhãn 2.}
+\begin{itemize}
+    \item Tích vô hướng:
+    \[
+        \mathbf{z}_{t1} \cdot \mathbf{z}_{12}
+        = (0.5571)(0.5122) + (0.7428)(0.7682) + (0.3714)(0.3841) = 0.9986
+    \]
+    \item
+    \[
+        S_C = \frac{0.9986}{1.0000 \times 1.0000} = 0.9986, \quad
+        D_C = 1 - 0.9986 = 0.0014
+    \]
+    \item
+    \[
+        w_{12} = \frac{1}{0.0014} = 708.6242
+    \]
+\end{itemize}
+ 
+\textbf{Ví dụ 3 — Mẫu Train STT 10: $\mathbf{z}_{10} = (0.5657,\ 0.7071,\ 0.4243)$, Nhãn 2.}
+\begin{itemize}
+    \item Tích vô hướng:
+    \[
+        \mathbf{z}_{t1} \cdot \mathbf{z}_{10}
+        = (0.5571)(0.5657) + (0.7428)(0.7071) + (0.3714)(0.4243) = 0.9980
+    \]
+    \item
+    \[
+        S_C = \frac{0.9980}{1.0000 \times 1.0000} = 0.9979, \quad
+        D_C = 1 - 0.9979 = 0.0021
+    \]
+    \item
+    \[
+        w_{10} = \frac{1}{0.0021} = 482.3138
+    \]
+\end{itemize}
+ 
+Một cách tương tự, ta tính cho toàn bộ 30 mẫu Train:
+ 
+\begin{table}[H]
+\centering
+\footnotesize
+\renewcommand{\arraystretch}{0.85}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{|c|c|c|c|c|c|}
+\hline
+\textbf{STT Train} & \textbf{Tọa độ Train} & \textbf{Nhãn} & \textbf{$S_C$} & \textbf{$D_C = 1-S_C$} & \textbf{$w = 1/D_C$} \\ \hline
+1 & $(0.4082,\ 0.8165,\ 0.4082)$ & 1 & 0.9855 & 0.0145 & 69.0668 \\ \hline
+2 & $(0.6667,\ 0.6667,\ 0.3333)$ & 1 & 0.9904 & 0.0096 & 103.8753 \\ \hline
+3 & $(0.4851,\ 0.7276,\ 0.4851)$ & 1 & 0.9908 & 0.0092 & 109.0403 \\ \hline
+4 & $(0.6882,\ 0.6882,\ 0.2294)$ & 1 & 0.9798 & 0.0202 & 49.5858 \\ \hline
+5 & $(0.2673,\ 0.8018,\ 0.5345)$ & 1 & 0.9430 & 0.0570 & 17.5342 \\ \hline
+\textbf{6} & \textbf{$(0.5571,\ 0.7428,\ 0.3714)$} & \textbf{1} & \textbf{1.0000} & \textbf{0.0000} & \textbf{100000.0000} \\ \hline
+7 & $(0.4364,\ 0.8729,\ 0.2182)$ & 1 & 0.9725 & 0.0275 & 36.3881 \\ \hline
+8 & $(0.7428,\ 0.5571,\ 0.3714)$ & 1 & 0.9655 & 0.0345 & 29.0000 \\ \hline
+9 & $(0.4867,\ 0.8111,\ 0.3244)$ & 2 & 0.9941 & 0.0059 & 169.0649 \\ \hline
+\textbf{10} & \textbf{$(0.5657,\ 0.7071,\ 0.4243)$} & \textbf{2} & \textbf{0.9979} & \textbf{0.0021} & \textbf{482.3138} \\ \hline
+11 & $(0.6492,\ 0.6492,\ 0.3895)$ & 2 & 0.9912 & 0.0088 & 113.5685 \\ \hline
+\textbf{12} & \textbf{$(0.5122,\ 0.7682,\ 0.3841)$} & \textbf{2} & \textbf{0.9986} & \textbf{0.0014} & \textbf{708.6242} \\ \hline
+13 & $(0.6155,\ 0.7385,\ 0.2462)$ & 2 & 0.9904 & 0.0096 & 104.2135 \\ \hline
+14 & $(0.7107,\ 0.5922,\ 0.3553)$ & 2 & 0.9766 & 0.0234 & 42.6690 \\ \hline
+15 & $(0.7071,\ 0.5657,\ 0.4243)$ & 2 & 0.9717 & 0.0283 & 35.2981 \\ \hline
+16 & $(0.6667,\ 0.6667,\ 0.3333)$ & 2 & 0.9904 & 0.0096 & 103.8753 \\ \hline
+17 & $(0.6155,\ 0.7181,\ 0.3077)$ & 3 & 0.9960 & 0.0040 & 247.1471 \\ \hline
+18 & $(0.6445,\ 0.6445,\ 0.3683)$ & 3 & 0.9913 & 0.0087 & 115.4978 \\ \hline
+19 & $(0.6150,\ 0.7028,\ 0.3514)$ & 3 & 0.9973 & 0.0027 & 373.1969 \\ \hline
+20 & $(0.7028,\ 0.6150,\ 0.3514)$ & 3 & 0.9810 & 0.0190 & 52.5782 \\ \hline
+21 & $(0.5735,\ 0.7646,\ 0.2867)$ & 3 & 0.9960 & 0.0040 & 252.1942 \\ \hline
+22 & $(0.6810,\ 0.6810,\ 0.3405)$ & 3 & 0.9904 & 0.0096 & 103.8976 \\ \hline
+23 & $(0.6325,\ 0.7115,\ 0.3162)$ & 4 & 0.9952 & 0.0048 & 206.7884 \\ \hline
+24 & $(0.6429,\ 0.6429,\ 0.3571)$ & 4 & 0.9913 & 0.0087 & 114.8727 \\ \hline
+25 & $(0.6285,\ 0.6983,\ 0.3491)$ & 4 & 0.9962 & 0.0038 & 264.7828 \\ \hline
+26 & $(0.6983,\ 0.6285,\ 0.3491)$ & 4 & 0.9833 & 0.0167 & 59.8476 \\ \hline
+27 & $(0.5963,\ 0.7454,\ 0.2981)$ & 4 & 0.9965 & 0.0035 & 289.1881 \\ \hline
+28 & $(0.6623,\ 0.6623,\ 0.3311)$ & 4 & 0.9904 & 0.0096 & 103.8752 \\ \hline
+29 & $(0.7153,\ 0.6358,\ 0.3974)$ & 4 & 0.9827 & 0.0173 & 57.8286 \\ \hline
+30 & $(0.7625,\ 0.6100,\ 0.3050)$ & 4 & 0.9689 & 0.0311 & 32.1171 \\ \hline
+\end{tabular}%
+}
+\caption{Độ tương đồng Cosine giữa Mẫu Test 1 và toàn bộ tập Train}
+\end{table}
+ 
+\textbf{Kết luận Mẫu Test 1:} 3 Láng giềng gần nhất là STT 6 (Nhãn 1, $D_C=0.0000$), STT 12 (Nhãn 2, $D_C=0.0014$), STT 10 (Nhãn 2, $D_C=0.0021$).
+\begin{itemize}
+    \item Tổng trọng số Class 1 $= w_6 = 100000.0000$
+    \item Tổng trọng số Class 2 $= w_{12} + w_{10} = 708.6242 + 482.3138 = 1190.9380$
+\end{itemize}
+$\implies$ \textbf{Dự đoán: Class 1}
+ 
+\vspace{0.5cm}
+ 
+% ================================================================
+% MẪU TEST 2
+% ================================================================
+\textbf{Mẫu Test 2: $x_{t2} = (0.6492,\ 0.6492,\ 0.3895)$}
+ 
+\vspace{0.3cm}
+\textbf{Ví dụ 1 — Mẫu Train STT 11: $\mathbf{z}_{11} = (0.6492,\ 0.6492,\ 0.3895)$, Nhãn 2.}
+\begin{itemize}
+    \item Tích vô hướng:
+    \[
+        \mathbf{z}_{t2} \cdot \mathbf{z}_{11}
+        = (0.6492)(0.6492) + (0.6492)(0.6492) + (0.3895)(0.3895) = 1.0000
+    \]
+    \item
+    \[
+        S_C = 1.0000, \quad D_C = 0.0000, \quad
+        w_{11} = \frac{1}{10^{-5}} = 100000.0000
+    \]
+\end{itemize}
+ 
+\textbf{Ví dụ 2 — Mẫu Train STT 18: $\mathbf{z}_{18} = (0.6445,\ 0.6445,\ 0.3683)$, Nhãn 3.}
+\begin{itemize}
+    \item Tích vô hướng:
+    \[
+        \mathbf{z}_{t2} \cdot \mathbf{z}_{18}
+        = (0.6492)(0.6445) + (0.6492)(0.6445) + (0.3895)(0.3683) = 0.9999
+    \]
+    \item
+    \[
+        S_C = 0.9999, \quad D_C = 0.0001, \quad
+        w_{18} = \frac{1}{0.0001} = 6750.4779
+    \]
+\end{itemize}
+ 
+\textbf{Ví dụ 3 — Mẫu Train STT 24: $\mathbf{z}_{24} = (0.6429,\ 0.6429,\ 0.3571)$, Nhãn 4.}
+\begin{itemize}
+    \item Tích vô hướng:
+    \[
+        \mathbf{z}_{t2} \cdot \mathbf{z}_{24}
+        = (0.6492)(0.6429) + (0.6492)(0.6429) + (0.3895)(0.3571) = 0.9996
+    \]
+    \item
+    \[
+        S_C = 0.9996, \quad D_C = 0.0004, \quad
+        w_{24} = \frac{1}{0.0004} = 2748.5447
+    \]
+\end{itemize}
+ 
+Một cách tương tự, ta tính cho toàn bộ 30 mẫu Train:
+ 
+\begin{table}[H]
+\centering
+\footnotesize
+\renewcommand{\arraystretch}{0.85}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{|c|c|c|c|c|c|}
+\hline
+\textbf{STT Train} & \textbf{Tọa độ Train} & \textbf{Nhãn} & \textbf{$S_C$} & \textbf{$D_C = 1-S_C$} & \textbf{$w = 1/D_C$} \\ \hline
+1 & $(0.4082,\ 0.8165,\ 0.4082)$ & 1 & 0.9567 & 0.0433 & 23.0816 \\ \hline
+2 & $(0.6667,\ 0.6667,\ 0.3333)$ & 1 & 0.9981 & 0.0019 & 530.0046 \\ \hline
+3 & $(0.4851,\ 0.7276,\ 0.4851)$ & 1 & 0.9788 & 0.0212 & 47.2588 \\ \hline
+4 & $(0.6882,\ 0.6882,\ 0.2294)$ & 1 & 0.9856 & 0.0144 & 69.5740 \\ \hline
+5 & $(0.2673,\ 0.8018,\ 0.5345)$ & 1 & 0.9047 & 0.0953 & 10.4897 \\ \hline
+6 & $(0.5571,\ 0.7428,\ 0.3714)$ & 1 & 0.9912 & 0.0088 & 113.5685 \\ \hline
+7 & $(0.4364,\ 0.8729,\ 0.2182)$ & 1 & 0.9375 & 0.0625 & 16.0003 \\ \hline
+8 & $(0.7428,\ 0.5571,\ 0.3714)$ & 1 & 0.9912 & 0.0088 & 113.5685 \\ \hline
+9 & $(0.4867,\ 0.8111,\ 0.3244)$ & 2 & 0.9715 & 0.0285 & 35.0865 \\ \hline
+10 & $(0.5657,\ 0.7071,\ 0.4243)$ & 2 & 0.9942 & 0.0058 & 173.0219 \\ \hline
+\textbf{11} & \textbf{$(0.6492,\ 0.6492,\ 0.3895)$} & \textbf{2} & \textbf{1.0000} & \textbf{0.0000} & \textbf{100000.0000} \\ \hline
+12 & $(0.5122,\ 0.7682,\ 0.3841)$ & 2 & 0.9835 & 0.0165 & 60.5318 \\ \hline
+13 & $(0.6155,\ 0.7385,\ 0.2462)$ & 2 & 0.9850 & 0.0150 & 66.8261 \\ \hline
+14 & $(0.7107,\ 0.5922,\ 0.3553)$ & 2 & 0.9959 & 0.0041 & 242.2114 \\ \hline
+15 & $(0.7071,\ 0.5657,\ 0.4243)$ & 2 & 0.9942 & 0.0058 & 173.0219 \\ \hline
+16 & $(0.6667,\ 0.6667,\ 0.3333)$ & 2 & 0.9981 & 0.0019 & 530.0046 \\ \hline
+17 & $(0.6155,\ 0.7181,\ 0.3077)$ & 3 & 0.9937 & 0.0063 & 157.8629 \\ \hline
+\textbf{18} & \textbf{$(0.6445,\ 0.6445,\ 0.3683)$} & \textbf{3} & \textbf{0.9999} & \textbf{0.0001} & \textbf{6750.4779} \\ \hline
+19 & $(0.6150,\ 0.7028,\ 0.3514)$ & 3 & 0.9972 & 0.0028 & 362.2646 \\ \hline
+20 & $(0.7028,\ 0.6150,\ 0.3514)$ & 3 & 0.9972 & 0.0028 & 362.2646 \\ \hline
+21 & $(0.5735,\ 0.7646,\ 0.2867)$ & 3 & 0.9851 & 0.0149 & 67.2068 \\ \hline
+22 & $(0.6810,\ 0.6810,\ 0.3405)$ & 3 & 0.9981 & 0.0019 & 530.8185 \\ \hline
+23 & $(0.6325,\ 0.7115,\ 0.3162)$ & 4 & 0.9953 & 0.0047 & 210.6351 \\ \hline
+\textbf{24} & \textbf{$(0.6429,\ 0.6429,\ 0.3571)$} & \textbf{4} & \textbf{0.9996} & \textbf{0.0004} & \textbf{2748.5447} \\ \hline
+25 & $(0.6285,\ 0.6983,\ 0.3491)$ & 4 & 0.9978 & 0.0022 & 449.5346 \\ \hline
+26 & $(0.6983,\ 0.6285,\ 0.3491)$ & 4 & 0.9978 & 0.0022 & 449.5346 \\ \hline
+27 & $(0.5963,\ 0.7454,\ 0.2981)$ & 4 & 0.9898 & 0.0102 & 97.7813 \\ \hline
+28 & $(0.6623,\ 0.6623,\ 0.3311)$ & 4 & 0.9981 & 0.0019 & 529.9992 \\ \hline
+29 & $(0.7153,\ 0.6358,\ 0.3974)$ & 4 & 0.9985 & 0.0015 & 667.8943 \\ \hline
+30 & $(0.7625,\ 0.6100,\ 0.3050)$ & 4 & 0.9898 & 0.0102 & 97.8477 \\ \hline
+\end{tabular}%
+}
+\caption{Độ tương đồng Cosine giữa Mẫu Test 2 và toàn bộ tập Train}
+\end{table}
+ 
+\textbf{Kết luận Mẫu Test 2:} 3 Láng giềng gần nhất là STT 11 (Nhãn 2, $D_C=0.0000$), STT 18 (Nhãn 3, $D_C=0.0001$), STT 24 (Nhãn 4, $D_C=0.0004$).
+\begin{itemize}
+    \item Tổng trọng số Class 2 $= w_{11} = 100000.0000$
+    \item Tổng trọng số Class 3 $= w_{18} = 6750.4779$
+    \item Tổng trọng số Class 4 $= w_{24} = 2748.5447$
+\end{itemize}
+$\implies$ \textbf{Dự đoán: Class 2}
+ 
+\vspace{0.5cm}
+ 
+% ================================================================
+% MẪU TEST 3
+% ================================================================
+\textbf{Mẫu Test 3: $x_{t3} = (0.6150,\ 0.7028,\ 0.3514)$}
+ 
+\vspace{0.3cm}
+\textbf{Ví dụ 1 — Mẫu Train STT 19: $\mathbf{z}_{19} = (0.6150,\ 0.7028,\ 0.3514)$, Nhãn 3.}
+\begin{itemize}
+    \item Tích vô hướng:
+    \[
+        \mathbf{z}_{t3} \cdot \mathbf{z}_{19}
+        = (0.6150)(0.6150) + (0.7028)(0.7028) + (0.3514)(0.3514) = 1.0000
+    \]
+    \item
+    \[
+        S_C = 1.0000, \quad D_C = 0.0000, \quad
+        w_{19} = \frac{1}{10^{-5}} = 100000.0000
+    \]
+\end{itemize}
+ 
+\textbf{Ví dụ 2 — Mẫu Train STT 25: $\mathbf{z}_{25} = (0.6285,\ 0.6983,\ 0.3491)$, Nhãn 4.}
+\begin{itemize}
+    \item Tích vô hướng:
+    \[
+        \mathbf{z}_{t3} \cdot \mathbf{z}_{25}
+        = (0.6150)(0.6285) + (0.7028)(0.6983) + (0.3514)(0.3491) = 0.9999
+    \]
+    \item
+    \[
+        S_C = 0.9999, \quad D_C = 0.0001, \quad
+        w_{25} = \frac{1}{0.0001} = 10632.3271
+    \]
+\end{itemize}
+ 
+\textbf{Ví dụ 3 — Mẫu Train STT 23: $\mathbf{z}_{23} = (0.6325,\ 0.7115,\ 0.3162)$, Nhãn 4.}
+\begin{itemize}
+    \item Tích vô hướng:
+    \[
+        \mathbf{z}_{t3} \cdot \mathbf{z}_{23}
+        = (0.6150)(0.6325) + (0.7028)(0.7115) + (0.3514)(0.3162) = 0.9992
+    \]
+    \item
+    \[
+        S_C = 0.9992, \quad D_C = 0.0008, \quad
+        w_{23} = \frac{1}{0.0008} = 1256.8885
+    \]
+\end{itemize}
+ 
+Một cách tương tự, ta tính cho toàn bộ 30 mẫu Train:
+ 
+\begin{table}[H]
+\centering
+\footnotesize
+\renewcommand{\arraystretch}{0.85}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{|c|c|c|c|c|c|}
+\hline
+\textbf{STT Train} & \textbf{Tọa độ Train} & \textbf{Nhãn} & \textbf{$S_C$} & \textbf{$D_C = 1-S_C$} & \textbf{$w = 1/D_C$} \\ \hline
+1 & $(0.4082,\ 0.8165,\ 0.4082)$ & 1 & 0.9705 & 0.0295 & 33.8715 \\ \hline
+2 & $(0.6667,\ 0.6667,\ 0.3333)$ & 1 & 0.9978 & 0.0022 & 464.2462 \\ \hline
+3 & $(0.4851,\ 0.7276,\ 0.4851)$ & 1 & 0.9823 & 0.0177 & 56.4390 \\ \hline
+4 & $(0.6882,\ 0.6882,\ 0.2294)$ & 1 & 0.9898 & 0.0102 & 97.5747 \\ \hline
+5 & $(0.2673,\ 0.8018,\ 0.5345)$ & 1 & 0.9177 & 0.0823 & 12.1525 \\ \hline
+6 & $(0.5571,\ 0.7428,\ 0.3714)$ & 1 & 0.9973 & 0.0027 & 373.1969 \\ \hline
+7 & $(0.4364,\ 0.8729,\ 0.2182)$ & 1 & 0.9606 & 0.0394 & 25.3997 \\ \hline
+8 & $(0.7428,\ 0.5571,\ 0.3714)$ & 1 & 0.9810 & 0.0190 & 52.5782 \\ \hline
+9 & $(0.4867,\ 0.8111,\ 0.3244)$ & 2 & 0.9855 & 0.0145 & 69.0193 \\ \hline
+10 & $(0.5657,\ 0.7071,\ 0.4243)$ & 2 & 0.9961 & 0.0039 & 257.2222 \\ \hline
+11 & $(0.6492,\ 0.6492,\ 0.3895)$ & 2 & 0.9972 & 0.0028 & 362.2646 \\ \hline
+12 & $(0.5122,\ 0.7682,\ 0.3841)$ & 2 & 0.9920 & 0.0080 & 125.4373 \\ \hline
+13 & $(0.6155,\ 0.7385,\ 0.2462)$ & 2 & 0.9938 & 0.0062 & 160.8501 \\ \hline
+14 & $(0.7107,\ 0.5922,\ 0.3553)$ & 2 & 0.9892 & 0.0108 & 92.5884 \\ \hline
+15 & $(0.7071,\ 0.5657,\ 0.4243)$ & 2 & 0.9837 & 0.0163 & 61.2386 \\ \hline
+16 & $(0.6667,\ 0.6667,\ 0.3333)$ & 2 & 0.9978 & 0.0022 & 464.2462 \\ \hline
+17 & $(0.6155,\ 0.7181,\ 0.3077)$ & 3 & 0.9989 & 0.0011 & 930.2827 \\ \hline
+18 & $(0.6445,\ 0.6445,\ 0.3683)$ & 3 & 0.9978 & 0.0022 & 452.3438 \\ \hline
+\textbf{19} & \textbf{$(0.6150,\ 0.7028,\ 0.3514)$} & \textbf{3} & \textbf{1.0000} & \textbf{0.0000} & \textbf{100000.0000} \\ \hline
+20 & $(0.7028,\ 0.6150,\ 0.3514)$ & 3 & 0.9923 & 0.0077 & 129.1549 \\ \hline
+21 & $(0.5735,\ 0.7646,\ 0.2867)$ & 3 & 0.9951 & 0.0049 & 204.7115 \\ \hline
+22 & $(0.6810,\ 0.6810,\ 0.3405)$ & 3 & 0.9978 & 0.0022 & 464.4573 \\ \hline
+\textbf{23} & \textbf{$(0.6325,\ 0.7115,\ 0.3162)$} & \textbf{4} & \textbf{0.9992} & \textbf{0.0008} & \textbf{1256.8885} \\ \hline
+24 & $(0.6429,\ 0.6429,\ 0.3571)$ & 4 & 0.9980 & 0.0020 & 492.5382 \\ \hline
+\textbf{25} & \textbf{$(0.6285,\ 0.6983,\ 0.3491)$} & \textbf{4} & \textbf{0.9999} & \textbf{0.0001} & \textbf{10632.3271} \\ \hline
+26 & $(0.6983,\ 0.6285,\ 0.3491)$ & 4 & 0.9938 & 0.0062 & 160.7169 \\ \hline
+27 & $(0.5963,\ 0.7454,\ 0.2981)$ & 4 & 0.9975 & 0.0025 & 399.1028 \\ \hline
+28 & $(0.6623,\ 0.6623,\ 0.3311)$ & 4 & 0.9978 & 0.0022 & 464.2448 \\ \hline
+29 & $(0.7153,\ 0.6358,\ 0.3974)$ & 4 & 0.9927 & 0.0073 & 136.1630 \\ \hline
+30 & $(0.7625,\ 0.6100,\ 0.3050)$ & 4 & 0.9844 & 0.0156 & 64.0245 \\ \hline
+\end{tabular}%
+}
+\caption{Độ tương đồng Cosine giữa Mẫu Test 3 và toàn bộ tập Train}
+\end{table}
+ 
+\textbf{Kết luận Mẫu Test 3:} 3 Láng giềng gần nhất là STT 19 (Nhãn 3, $D_C=0.0000$), STT 25 (Nhãn 4, $D_C=0.0001$), STT 23 (Nhãn 4, $D_C=0.0008$).
+\begin{itemize}
+    \item Tổng trọng số Class 3 $= w_{19} = 100000.0000$
+    \item Tổng trọng số Class 4 $= w_{25} + w_{23} = 10632.3271 + 1256.8885 = 11889.2156$
+\end{itemize}
+$\implies$ \textbf{Dự đoán: Class 3}
+ 
+\vspace{0.5cm}
+ 
+% ================================================================
+% MẪU TEST 4
+% ================================================================
+\textbf{Mẫu Test 4: $x_{t4} = (0.6429,\ 0.6429,\ 0.3571)$}
+ 
+\vspace{0.3cm}
+\textbf{Ví dụ 1 — Mẫu Train STT 24: $\mathbf{z}_{24} = (0.6429,\ 0.6429,\ 0.3571)$, Nhãn 4.}
+\begin{itemize}
+    \item Tích vô hướng:
+    \[
+        \mathbf{z}_{t4} \cdot \mathbf{z}_{24}
+        = (0.6429)(0.6429) + (0.6429)(0.6429) + (0.3571)(0.3571) = 1.0000
+    \]
+    \item
+    \[
+        S_C = 1.0000, \quad D_C = 0.0000, \quad
+        w_{24} = \frac{1}{10^{-5}} = 100000.0000
+    \]
+\end{itemize}
+ 
+\textbf{Ví dụ 2 — Mẫu Train STT 18: $\mathbf{z}_{18} = (0.6445,\ 0.6445,\ 0.3683)$, Nhãn 3.}
+\begin{itemize}
+    \item Tích vô hướng:
+    \[
+        \mathbf{z}_{t4} \cdot \mathbf{z}_{18}
+        = (0.6429)(0.6445) + (0.6429)(0.6445) + (0.3571)(0.3683) = 1.0000
+    \]
+    \item
+    \[
+        S_C = 1.0000, \quad D_C = 0.0000, \quad
+        w_{18} = \frac{1}{10^{-5}} = 20982.5854
+    \]
+\end{itemize}
+ 
+\textbf{Ví dụ 3 — Mẫu Train STT 11: $\mathbf{z}_{11} = (0.6492,\ 0.6492,\ 0.3895)$, Nhãn 2.}
+\begin{itemize}
+    \item Tích vô hướng:
+    \[
+        \mathbf{z}_{t4} \cdot \mathbf{z}_{11}
+        = (0.6429)(0.6492) + (0.6429)(0.6492) + (0.3571)(0.3895) = 0.9996
+    \]
+    \item
+    \[
+        S_C = 0.9996, \quad D_C = 0.0004, \quad
+        w_{11} = \frac{1}{0.0004} = 2748.5447
+    \]
+\end{itemize}
+ 
+Một cách tương tự, ta tính cho toàn bộ 30 mẫu Train:
+ 
+\begin{table}[H]
+\centering
+\footnotesize
+\renewcommand{\arraystretch}{0.85}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{|c|c|c|c|c|c|}
+\hline
+\textbf{STT Train} & \textbf{Tọa độ Train} & \textbf{Nhãn} & \textbf{$S_C$} & \textbf{$D_C = 1-S_C$} & \textbf{$w = 1/D_C$} \\ \hline
+1 & $(0.4082,\ 0.8165,\ 0.4082)$ & 1 & 0.9553 & 0.0447 & 22.3784 \\ \hline
+2 & $(0.6667,\ 0.6667,\ 0.3333)$ & 1 & 0.9994 & 0.0006 & 1684.0999 \\ \hline
+3 & $(0.4851,\ 0.7276,\ 0.4851)$ & 1 & 0.9755 & 0.0245 & 40.7692 \\ \hline
+4 & $(0.6882,\ 0.6882,\ 0.2294)$ & 1 & 0.9898 & 0.0102 & 98.2791 \\ \hline
+5 & $(0.2673,\ 0.8018,\ 0.5345)$ & 1 & 0.8990 & 0.1010 & 9.9041 \\ \hline
+6 & $(0.5571,\ 0.7428,\ 0.3714)$ & 1 & 0.9913 & 0.0087 & 114.8727 \\ \hline
+7 & $(0.4364,\ 0.8729,\ 0.2182)$ & 1 & 0.9415 & 0.0585 & 17.0925 \\ \hline
+8 & $(0.7428,\ 0.5571,\ 0.3714)$ & 1 & 0.9913 & 0.0087 & 114.8727 \\ \hline
+9 & $(0.4867,\ 0.8111,\ 0.3244)$ & 2 & 0.9728 & 0.0272 & 36.7074 \\ \hline
+10 & $(0.5657,\ 0.7071,\ 0.4243)$ & 2 & 0.9928 & 0.0072 & 138.9639 \\ \hline
+\textbf{11} & \textbf{$(0.6492,\ 0.6492,\ 0.3895)$} & \textbf{2} & \textbf{0.9996} & \textbf{0.0004} & \textbf{2748.5447} \\ \hline
+12 & $(0.5122,\ 0.7682,\ 0.3841)$ & 2 & 0.9831 & 0.0169 & 59.2485 \\ \hline
+13 & $(0.6155,\ 0.7385,\ 0.2462)$ & 2 & 0.9887 & 0.0113 & 88.3410 \\ \hline
+14 & $(0.7107,\ 0.5922,\ 0.3553)$ & 2 & 0.9964 & 0.0036 & 277.7632 \\ \hline
+15 & $(0.7071,\ 0.5657,\ 0.4243)$ & 2 & 0.9928 & 0.0072 & 138.9639 \\ \hline
+16 & $(0.6667,\ 0.6667,\ 0.3333)$ & 2 & 0.9994 & 0.0006 & 1684.0999 \\ \hline
+17 & $(0.6155,\ 0.7181,\ 0.3077)$ & 3 & 0.9956 & 0.0044 & 227.7750 \\ \hline
+\textbf{18} & \textbf{$(0.6445,\ 0.6445,\ 0.3683)$} & \textbf{3} & \textbf{1.0000} & \textbf{0.0000} & \textbf{20982.5854} \\ \hline
+19 & $(0.6150,\ 0.7028,\ 0.3514)$ & 3 & 0.9980 & 0.0020 & 492.5382 \\ \hline
+20 & $(0.7028,\ 0.6150,\ 0.3514)$ & 3 & 0.9980 & 0.0020 & 492.5382 \\ \hline
+21 & $(0.5735,\ 0.7646,\ 0.2867)$ & 3 & 0.9876 & 0.0124 & 80.7531 \\ \hline
+22 & $(0.6810,\ 0.6810,\ 0.3405)$ & 3 & 0.9994 & 0.0006 & 1688.7160 \\ \hline
+23 & $(0.6325,\ 0.7115,\ 0.3162)$ & 4 & 0.9970 & 0.0030 & 338.2214 \\ \hline
+\textbf{24} & \textbf{$(0.6429,\ 0.6429,\ 0.3571)$} & \textbf{4} & \textbf{1.0000} & \textbf{0.0000} & \textbf{100000.0000} \\ \hline
+25 & $(0.6285,\ 0.6983,\ 0.3491)$ & 4 & 0.9986 & 0.0014 & 726.9713 \\ \hline
+26 & $(0.6983,\ 0.6285,\ 0.3491)$ & 4 & 0.9986 & 0.0014 & 726.9713 \\ \hline
+27 & $(0.5963,\ 0.7454,\ 0.2981)$ & 4 & 0.9920 & 0.0080 & 125.0775 \\ \hline
+28 & $(0.6623,\ 0.6623,\ 0.3311)$ & 4 & 0.9994 & 0.0006 & 1684.0693 \\ \hline
+29 & $(0.7153,\ 0.6358,\ 0.3974)$ & 4 & 0.9983 & 0.0017 & 598.4411 \\ \hline
+30 & $(0.7625,\ 0.6100,\ 0.3050)$ & 4 & 0.9920 & 0.0080 & 125.1640 \\ \hline
+\end{tabular}%
+}
+\caption{Độ tương đồng Cosine giữa Mẫu Test 4 và toàn bộ tập Train}
+\end{table}
+ 
+\textbf{Kết luận Mẫu Test 4:} 3 Láng giềng gần nhất là STT 24 (Nhãn 4, $D_C=0.0000$), STT 18 (Nhãn 3, $D_C=0.0000$), STT 11 (Nhãn 2, $D_C=0.0004$).
+\begin{itemize}
+    \item Tổng trọng số Class 2 $= w_{11} = 2748.5447$
+    \item Tổng trọng số Class 3 $= w_{18} = 20982.5854$
+    \item Tổng trọng số Class 4 $= w_{24} = 100000.0000$
+\end{itemize}
+$\implies$ \textbf{Dự đoán: Class 4}
+\end{document} 

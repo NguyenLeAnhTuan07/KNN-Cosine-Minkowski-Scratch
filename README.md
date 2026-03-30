@@ -1,219 +1,141 @@
-# 🤖 K-Nearest Neighbors (KNN) — From Theory to Practice
+# KNN Cosine & Minkowski Framework
 
-> **ye-PHD Lab** — A comprehensive research document covering the KNN algorithm from mathematical foundations to hands-on experimentation.
+A from-scratch implementation of the **K-Nearest Neighbors (KNN)** classifier supporting two distinct geometric approaches — Cosine Similarity and Minkowski Distance — with professional-grade preprocessing pipelines. No high-level machine learning libraries are used in the core algorithm.
 
----
-
-## 📌 Overview
-
-**K-Nearest Neighbors (KNN)** is a supervised learning and non-parametric algorithm. It operates on a simple principle: **similar data points tend to cluster together in feature space**.
-
-KNN supports two types of tasks:
-- 🏷️ **Classification** — assigns labels via majority voting among neighbors
-- 📈 **Regression** — predicts continuous values by averaging neighbor outputs
+**Author:** Nguyen Le Anh Tuan
 
 ---
 
-## 📂 Table of Contents
+## Overview
 
-| Chapter | Topic |
-|---------|-------|
-| 1 | What is the KNN Algorithm? |
-| 2 | Feature Scaling |
-| 3 | Distance Metrics in KNN |
-| 4 | The `p` Parameter in Minkowski Distance |
-| 5 | Choosing the Parameter `K` |
-| 6 | Mathematical Model: KNN + Cosine Similarity |
-| 7 | KNN Regression |
-| 8 | KNN Workflow |
-| 9 | Experiments on a 30-Sample Dataset |
+This project goes beyond a textbook KNN implementation by incorporating robust data-cleaning techniques and automated hyperparameter tuning. The result is a classifier that handles real-world data — including outliers, skewed distributions, and varying feature scales — without requiring external ML frameworks.
 
 ---
 
-## 🔧 Feature Scaling
+## Two Geometric Approaches
 
-Because KNN relies entirely on distance calculations, **feature scaling is mandatory** before running the model. Any feature with a larger value range will dominate the others.
+### 1. Cosine Similarity
 
-### Robust Scaling
-Uses **Median** and **Interquartile Range (IQR)** — both resistant to outliers — instead of mean and standard deviation:
+This approach measures the **angle** between feature vectors rather than the distance between them, making it well-suited for cases where the pattern of the data matters more than its absolute magnitude.
 
-$$x_{\text{scaled}} = \frac{x - \text{Median}(x)}{\text{IQR}(x)}$$
+**Preprocessing:** L2 Normalization — maps all samples onto a unit sphere so that only the direction of each vector is compared.
 
-### 2-Layer Clipping (Winsorization)
-Caps extreme values at safe boundaries without removing samples:
-- **Lower Bound:** $x_{\min} = Q1 - 1.5 \times \text{IQR}$
-- **Upper Bound:** $x_{\max} = Q3 + 1.5 \times \text{IQR}$
+**Best used when:**
+- Analyzing behavioral or usage patterns (e.g., telecom customer segmentation)
+- Feature scales vary significantly across columns (e.g., income vs. age)
+- The relative proportion of features is more meaningful than raw values
 
-### L2 Normalization (Unit Length Scaling)
-Used for Cosine Similarity tasks — transforms each sample vector to unit length:
+### 2. Minkowski Distance (Euclidean & Manhattan) with Triple-Filtering
 
-$$x_{\text{unit}} = \frac{x}{\sqrt{\sum_{i=1}^{n} x_i^2}}$$
+This approach uses the Minkowski metric with configurable `p`, allowing a switch between **Euclidean** (`p=2`) and **Manhattan** (`p=1`) distance. A three-stage preprocessing pipeline is applied to ensure robustness on noisy, real-world data.
 
----
+**Triple-Filtering pipeline:**
+- **Clipping** — removes extreme outliers by capping values at the 1st and 99th percentiles
+- **Robust Scaling** — normalizes features using the median and interquartile range (IQR), resistant to skewed distributions
+- **Distance Weighting** — closer neighbors receive proportionally higher influence during voting via inverse-distance weights (`1/d`)
 
-## 📐 Distance Metrics
-
-| Metric | Formula | Best Used When |
-|--------|---------|----------------|
-| **Euclidean** | $\sqrt{\sum(x_i - y_i)^2}$ | General-purpose, data is normalized |
-| **Manhattan** | $\sum\|x_i - y_i\|$ | Features are independent (e.g., Age vs. Income) |
-| **Chebyshev** | $\max(\|x_i - y_i\|)$ | Only the largest deviation matters |
-| **Minkowski** | $\left(\sum\|x_i - y_i\|^p\right)^{1/p}$ | Generalization of all three above |
-
-> 💡 **Note:** `p=1` → Manhattan, `p=2` → Euclidean, `p→∞` → Chebyshev
+**Best used when:**
+- Working with physical or clinical measurements (e.g., biomechanical orthopedic features)
+- The dataset contains noise or significant outliers
+- The physical distance between data points carries direct interpretive meaning
 
 ---
 
-## ⚙️ Choosing the Parameter K
-
-### k-Fold Cross Validation
-A 5-step process for finding the optimal `K` objectively:
-
-1. **Initialize** candidate K values (prefer odd numbers: `{1, 3, 5, 7, 9, 11}`)
-2. **Split** the dataset into `k` folds of equal size
-3. **Cross-evaluate** each candidate K across all folds
-4. **Select** the K with the highest `CV_Accuracy`
-5. **Retrain** the final model on the full dataset
-
-$$\text{CV\_Accuracy} = \frac{1}{k}\sum_{i=1}^{k} \text{Accuracy}_i$$
-
-> **Convention:** `K` (uppercase) = number of neighbors; `k` (lowercase) = number of folds (typically 5 or 10).
-
-### Distance Weighting
-Closer neighbors are given higher influence during voting:
-
-$$w_i = \frac{1}{d(x, x_i) + \varepsilon}$$
-
-where $\varepsilon$ is a small constant to avoid division by zero.
-
-### Weighted Majority Vote
-The predicted class is the one with the highest total weight among K neighbors:
-
-$$\hat{y}_q = \arg\max_{c \in C} \sum_{z_j \in N_K(z_q)} \mathbf{1}[y_j = c]$$
-
----
-
-## 📐 Cosine Similarity
-
-Measures the directional similarity between two vectors via the angle $\theta$:
-
-$$S_C(z_q, z_i) = \cos\theta = \frac{z_q \cdot z_i}{\|z_q\| \cdot \|z_i\|}$$
-
-Converted to a distance metric (smaller = more similar):
-
-$$D_C(z_q, z_i) = 1 - S_C(z_q, z_i), \quad D_C \in [0, 2]$$
-
----
-
-## 📊 KNN Regression
-
-Instead of voting, KNN Regression averages the target values of K neighbors:
-
-$$\hat{y} = \frac{1}{K}\sum_{i=1}^{K} y_i$$
-
-With distance weighting:
-
-$$\hat{y} = \frac{\sum_{i=1}^{K} w_i y_i}{\sum_{i=1}^{K} w_i}$$
-
-### KNN Regression vs. Linear Regression
-
-| Criterion | KNN Regression | Linear Regression |
-|-----------|---------------|-------------------|
-| Training time | ✅ Zero | ❌ Requires optimization |
-| Prediction time | ❌ Slow (scans full dataset) | ✅ Near-instant |
-| Non-linear patterns | ✅ Handles well | ❌ Constrained to linear |
-| Extrapolation | ❌ Cannot extrapolate | ✅ Can extend beyond training range |
-| Large-scale data | ❌ Expensive | ✅ Efficient |
-
-**Rule of thumb:** Simple, linear data → **Linear Regression**. Complex, non-linear, small-scale data → **KNN Regression**.
-
----
-
-## 🔄 KNN Workflow
+## Project Structure
 
 ```
-1. Choose K
-      ↓
-2. Compute distances from the query point to all training points
-      ↓
-3. Sort distances and select the K nearest neighbors
-      ↓
-4. Make prediction
-   ├── Classification → Weighted Majority Vote
-   └── Regression    → Weighted Average of neighbor values
+├── data/
+│   ├── data.csv              # Training dataset
+│   └── feature_names.txt     # Feature column names (last entry = target label)
+├── encoding/
+│   └── encoding.py           # Categorical encoding for string labels
+├── modelpre/
+│   ├── model.py              # KNN core algorithm
+│   └── preprocessing.py      # Scaling and normalization logic
+├── dudoan.csv                # Input file for new predictions
+├── predict.py                # Run predictions on dudoan.csv
+├── validation.py             # K-Fold cross-validation to find optimal K
+└── README.md
 ```
 
 ---
 
-## 🧪 Experiments
+## How to Use
 
-A dataset of **30 customer records** with 3 features — `Age`, `Income`, `Tenure` — and 4 class labels (`Custcat`). A test set of 4 samples was used for prediction.
+### 1. Prepare your dataset
 
-### Experiment 1 — Euclidean Distance + 5-Fold Cross Validation
+- Place your dataset in CSV format into the `data/` directory and rename it `data.csv`
+- Update `feature_names.txt` to match your column names, one per line
+- The **last name** in the list must be the target label (the column to predict)
 
-**Robust Scaling parameters:**
-- $\text{Age}_{\text{scaled}} = \frac{\text{Age} - 5.5}{5}$
-- $\text{Income}_{\text{scaled}} = \frac{\text{Income} - 5}{4.25}$
-- $\text{Tenure}_{\text{scaled}} = \frac{\text{Tenure} - 3}{2}$
+### 2. Encode categorical labels (if needed)
 
-**Cross Validation Results:**
+If your dataset contains string labels such as `"Normal"` or `"Abnormal"`, use `encoding.py` to map them to integer values (`0`, `1`, `2`, ...) before running the model.
 
-| K | Correct Predictions | Accuracy |
-|---|---------------------|----------|
-| K=1 | 26/30 | 86.67% |
-| K=3 | 27/30 | **90.00%** ✅ |
-| K=5 | 26/30 | 86.67% |
+### 3. Add samples to predict
 
-**Test Set Predictions (K=3, Weighted Euclidean):**
-
-| Test Sample | Predicted Class |
-|-------------|-----------------|
-| (Age=3, Income=4, Tenure=2) | Class 1 |
-| (Age=5, Income=5, Tenure=3) | Class 2 |
-| (Age=7, Income=8, Tenure=4) | Class 3 |
-| (Age=9, Income=9, Tenure=5) | Class 4 |
-
-> 🏆 **K=3 yields the best accuracy** with Euclidean distance.
+Place the new samples you want to classify in `dudoan.csv`, using the same columns as `data.csv` but **without** the target label column.
 
 ---
 
-### Experiment 2 — Cosine Similarity + 5-Fold Cross Validation
+## Installation & Execution
 
-Data was L2-normalized before computing Cosine similarity.
+**Create a virtual environment (recommended)**
 
-**Cross Validation Results:**
+```bash
+python -m venv venv
 
-| K | Correct Predictions | Accuracy |
-|---|---------------------|----------|
-| K=1 | 3/30 | 10.00% |
-| K=3 | 2/30 | 6.67% |
-| K=5 | 2/30 | 6.67% |
+# Linux / macOS
+source venv/bin/activate
 
-**Test Set Predictions (K=3, Cosine Similarity):**
+# Windows
+venv\Scripts\activate
+```
 
-| Test Sample | Predicted Class |
-|-------------|-----------------|
-| (Age=3, Income=4, Tenure=2) | Class 1 |
-| (Age=5, Income=5, Tenure=3) | Class 2 |
-| (Age=7, Income=8, Tenure=4) | Class 3 |
-| (Age=9, Income=9, Tenure=5) | Class 4 |
+**Install dependencies**
 
-> ⚠️ **Cosine Similarity performed poorly on this dataset.** It measures directional similarity, which is more meaningful for text/NLP data than for tabular numeric features. However, the final label predictions still matched expectations due to the strong angular separation between classes.
+```bash
+pip install numpy pandas
+```
+
+**Find the optimal K via cross-validation**
+
+```bash
+python validation.py
+```
+
+This runs K-Fold Cross Validation (5-Fold by default) across all odd values of K up to √N, printing the accuracy at each K and returning the best value. The Cosine version also tests even values of K, since distance weighting eliminates the risk of tied votes.
+
+**Run predictions**
+
+```bash
+python predict.py
+```
+
+Classifies each row in `dudoan.csv` using the optimal K found above and prints the predicted class for each sample.
 
 ---
 
-## 📚 References
+## Datasets
 
-- VinBigData — KNN Algorithm Illustration
-- Wikipedia — Euclidean Distance
-- Viblo — Manhattan & Chebyshev Distance
-
----
-
-## 👨‍🔬 Author
-
-**ye-PHD Lab**
+| Dataset | Description | Source |
+|---|---|---|
+| Telecom Customer Category | Multi-class customer segmentation | Included in repository |
+| Orthopedic Patients | Biomechanical features for clinical classification | [Kaggle](https://www.kaggle.com/datasets/uciml/biomechanical-features-of-orthopedic-patients/data) |
 
 ---
 
-*Made with ❤️ for learning Machine Learning from scratch.*
+## Key Design Decisions
+
+**Why no sklearn for the core algorithm?**
+The KNN logic — distance calculation, neighbor selection, and weighted voting — is implemented entirely with NumPy. This makes every step transparent and easy to trace, which is the primary goal of this project.
+
+**Why two separate preprocessing pipelines?**
+Cosine and Minkowski distance measure fundamentally different things. Cosine cares only about vector direction, so L2 Normalization is the correct and sufficient preprocessing step. Minkowski cares about magnitude, so outlier removal and robust scaling are necessary first. Mixing the pipelines would undermine the geometric guarantees of each metric.
+
+**Why use distance weighting for Minkowski but not Cosine?**
+After L2 Normalization, Cosine distances between neighboring points collapse to near zero, causing inverse-distance weights to become extremely large for the nearest neighbor and negligible for all others — effectively reducing the vote to K=1. Majority voting is therefore more stable for the Cosine variant.
+
+Thank you for checking out this project. Have a great day! ☀️
+
+Author: Nguyễn Lê Anh Tuấn, Nguyễn Đức Huy

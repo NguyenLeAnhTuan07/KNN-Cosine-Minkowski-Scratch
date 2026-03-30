@@ -135,3 +135,7 @@ Cosine and Minkowski distance measure fundamentally different things. Cosine car
 
 **Why use distance weighting for Minkowski but not Cosine?**
 After L2 Normalization, Cosine distances between neighboring points collapse to near zero, causing inverse-distance weights to become extremely large for the nearest neighbor and negligible for all others — effectively reducing the vote to K=1. Majority voting is therefore more stable for the Cosine variant.
+
+Thank you for checking out this project. Have a great day! ☀️
+
+Author: Nguyễn Lê Anh Tuấn, Nguyễn Đức Huy

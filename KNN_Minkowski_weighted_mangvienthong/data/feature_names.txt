@@ -1,0 +1,12 @@
+region
+tenure
+age
+marital
+address
+income
+ed
+employ
+retire
+gender
+reside
+custcat

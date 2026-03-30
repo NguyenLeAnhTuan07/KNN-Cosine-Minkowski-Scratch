@@ -1,0 +1,4 @@
+pelvic_incidence,pelvic_tilt numeric,lumbar_lordosis_angle,sacral_slope,pelvic_radius,degree_spondylolisthesis
+60.12,20.34,40.11,39.78,100.22,12.55
+45.50,10.20,30.45,35.30,125.10,-2.10
+75.00,25.00,60.00,50.00,110.00,50.00

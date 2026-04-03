@@ -2,7 +2,7 @@
 
 A from-scratch implementation of the **K-Nearest Neighbors (KNN)** classifier supporting two distinct geometric approaches — Cosine Similarity and Minkowski Distance — with professional-grade preprocessing pipelines. No high-level machine learning libraries are used in the core algorithm.
 
-**Author:** Nguyen Le Anh Tuan
+**Author:** Nguyen Le Anh Tuan, Nguyen Duc Huy
 
 ---
 

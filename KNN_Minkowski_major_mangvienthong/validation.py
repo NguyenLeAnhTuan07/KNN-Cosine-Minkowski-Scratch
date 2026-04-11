@@ -1,33 +1,47 @@
-import pandas as pd
 import numpy as np
-from modelpre.preprocessing import encode_categorical
+import pandas as pd
+from encoding.encoding import encode_categorical
+from modelpre.robust_clipping import fit_scaler, is_fitted, load_params, save_scaled_csv
 
-# Hàm tính khoảng cách Minkowski nội bộ để phục vụ Validation
+
+# Hàm tính khoảng cách Minkowski phục vụ Validation
 def minkowski_dist(X_train, x_test, p):
-    return np.power(np.sum(np.power(np.abs(X_train - x_test), p), axis=1), 1/p)
+    return np.power(
+        np.sum(np.power(np.abs(X_train - x_test), p), axis=1),
+        1 / p
+    )
+
 
 def run_minkowski_validation(file_path, feature_names_path, p_val=2, k_folds=5):
     df = pd.read_csv(file_path)
     df = encode_categorical(df)
-    
+
     with open(feature_names_path, 'r') as f:
         features = [line.strip() for line in f.readlines() if line.strip()]
-    
-    X = df[features[:-1]].values.astype(float)
-    y = df[features[-1]].values
 
-    # --- MÀNG LỌC 1: CLIPPING (Chặn 1% - 99%) ---
-    lower = np.percentile(X, 1, axis=0)
-    upper = np.percentile(X, 99, axis=0)
-    X = np.clip(X, lower, upper)
+    feature_names = features[:-1]
+    label_name    = features[-1]
 
-    # --- MÀNG LỌC 2: ROBUST SCALING (Median & IQR) ---
-    median = np.median(X, axis=0)
-    q1, q3 = np.percentile(X, 25, axis=0), np.percentile(X, 75, axis=0)
-    iqr = q3 - q1
-    iqr[iqr == 0] = 1
-    X_scaled = (X - median) / iqr
+    X = df[feature_names].values.astype(float)
+    y = df[label_name].values
 
+    # --- Scale toàn bộ data qua scale.py ---
+    # Fit mới (không ghi đè scaler_config đang dùng bởi predict) vì validation
+    # cần kiểm soát từng fold nên tự scale inline theo cùng logic.
+    # Nếu scaler chưa tồn tại, fit và lưu luôn để predict có thể dùng sau.
+    if not is_fitted():
+        print("[validation] Chưa có scaler, đang fit và lưu...")
+        X_scaled, _ = fit_scaler(X, feature_names, y=y)
+        save_scaled_csv(X_scaled, feature_names,
+                        'scale/data_scaled.csv', y=y, label_name=label_name)
+    else:
+        # Dùng params đã lưu để scale nhất quán với predict
+        params = load_params()
+        X_clipped = np.clip(X, params['lower_perc'], params['upper_perc'])
+        X_scaled  = (X_clipped - params['median']) / params['iqr']
+        print("[validation] Đã dùng scaler hiện có để scale data.")
+
+    # --- K-Fold Cross Validation ---
     indices = np.arange(len(X_scaled))
     np.random.seed(42)
     np.random.shuffle(indices)
@@ -44,24 +58,22 @@ def run_minkowski_validation(file_path, feature_names_path, p_val=2, k_folds=5):
     for k in range(1, max_k + 1, 2):
         fold_accs = []
         for i in range(k_folds):
-            test_idx = folds[i]
+            test_idx  = folds[i]
             train_idx = np.concatenate([folds[j] for j in range(k_folds) if j != i])
             X_tr, X_te = X_scaled[train_idx], X_scaled[test_idx]
             y_tr, y_te = y[train_idx], y[test_idx]
-            
+
             correct = 0
             for idx, x_te_point in enumerate(X_te):
-                # Tính khoảng cách
-                dists = minkowski_dist(X_tr, x_te_point, p_val)
-                k_idx = np.argsort(dists)[:k]
-                # Majority Voting
-                labels = y_tr[k_idx]
+                dists   = minkowski_dist(X_tr, x_te_point, p_val)
+                k_idx   = np.argsort(dists)[:k]
+                labels  = y_tr[k_idx]
                 vals, counts = np.unique(labels, return_counts=True)
-                pred = vals[np.argmax(counts)]
-                
-                if pred == y_te[idx]: correct += 1
+                pred    = vals[np.argmax(counts)]
+                if pred == y_te[idx]:
+                    correct += 1
             fold_accs.append(correct / len(y_te))
-            
+
         avg_acc = np.mean(fold_accs)
         print(f"K = {k:2d} | Accuracy: {avg_acc:.4f}")
         results.append((k, avg_acc))
@@ -69,6 +81,7 @@ def run_minkowski_validation(file_path, feature_names_path, p_val=2, k_folds=5):
     best = max(results, key=lambda x: x[1])
     print(f"{'='*50}")
     print(f"==> K tốt nhất: {best[0]} với Acc: {best[1]:.4f}")
+
 
 if __name__ == "__main__":
     # Để kiểm tra Manhattan, đổi p_val=1

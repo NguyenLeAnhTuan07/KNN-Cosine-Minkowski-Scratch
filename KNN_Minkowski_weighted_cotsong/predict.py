@@ -1,34 +1,37 @@
-import pandas as pd
 import os
-import pickle
 from modelpre.preprocessing import run_preprocessing
 from modelpre.model import knn_core
+from modelpre.robust_clipping import is_fitted
 
 def main():
-    # Khai báo file
-    train_file = 'data/data.csv'
-    feature_txt = 'data/feature_names.txt'
-    predict_file = 'dudoan.csv'
-    
-    # 1. Tạo bộ Scale nếu chưa có
-    if not os.path.exists('scale/scaler_config.pkl'):
-        run_preprocessing(train_file, feature_txt, training=True)
+    train_file   = 'data/data.csv'
+    feature_txt  = 'data/feature_names.txt'
+    predict_file = 'predict/dudoan.csv'
 
-    # 2. Dự đoán dữ liệu từ file dudoan.csv
-    if os.path.exists(predict_file):
-        X_test_scaled, params = run_preprocessing(predict_file, feature_txt, training=False)
-        
-        X_train = params['X_train_scaled']
-        y_train = params['y_train']
-        
+    # 1. Fit scaler nếu chưa có (đồng thời tạo data_scaled.csv)
+    if not is_fitted():
+        print("[predict] Chưa có scaler, đang fit trên data training...")
+        run_preprocessing(train_file, feature_txt, training=True,
+                          scaled_output_path='scale/data_scaled.csv')
 
-        for i, row in enumerate(X_test_scaled):
-            # Mặc định K=3, p=2
-            res = knn_core(X_train, y_train, row)
-            
-            print(f"({res})")
-    else:
+    # 2. Dự đoán từ dudoan.csv
+    if not os.path.exists(predict_file):
         print(f"Lỗi: Không tìm thấy file {predict_file}")
+        return
+
+    X_test_scaled, params = run_preprocessing(
+        predict_file, feature_txt,
+        training=False,
+        scaled_output_path='scale/dudoan_scaled.csv'   # lưu file predict đã scale
+    )
+
+    X_train = params['X_train_scaled']
+    y_train = params['y_train']
+
+    for i, row in enumerate(X_test_scaled):
+        res = knn_core(X_train, y_train, row)   # mặc định K=3, p=2
+        print(f"({res})")
+
 
 if __name__ == "__main__":
     main()
